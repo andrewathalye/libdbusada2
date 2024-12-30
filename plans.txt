@@ -1,0 +1,258 @@
+Type signatures:
+================
+as enum
+   y b n q i u x t d h
+   [s o g] -> 
+   ( ) { } a v
+
+type Type_Signature_Element is ...
+type Type_Signature_Element_Stringlike is ... (s .. g)
+
+all integer types mapped to Ada Interface types
+
+Boolean => Boolean (but requires 32 bits space)
+Double => 64Bit Double IEEE
+
+( must be followed by )
+{ contains one BASIC TYPE and one COMPLETE TYPE then }
+   only allowed after an array but we can have fun with this
+a and v followed by one complete type
+
+
+Max length 255
+
+Null terminated in messages
+
+UNIX_FD => <not sure yet>
+
+String -> [utf8 string]
+   but needs null termination over the wire
+
+type Type_Signature is <string>
+type Object_Path is <string>
+
+Object Paths:
+=============
+/.../.../...
+
+If has any elements, may not end in /
+Must begin with /
+Only certain ascii characters allowed
+No more than one / in a row
+Check with regex from validator project
+
+Marshalling
+===========
+Messages alligned according to their size except
+   struct and dict_entry always aligned to 8 byte
+   padding must be made of nul bytes and may not be excessive
+
+Boolean takes 32 bits
+all signed values two’s complement
+
+string, object path =>
+   unsigned 32 byte length (padded)
+   n>0 bytes of utf8 text
+   null byte
+
+signature =>
+   unsigned 8 byte length
+   n>0 bytes of utf8 text
+   null byte
+
+array =>
+   unsigned 32 byte length (padded)
+   alignment padding
+   sequentially marshalled array elements
+   MAXIMUM SIZE 64MB
+
+variant =>
+   SIGNATURE
+   padding
+   element
+
+unix fd =>
+   todo figure out how to transfer file descriptors
+
+Message Format
+==============
+   signature is yyyyuua(yv)
+   endianness 'l' or 'B'
+   message type
+      0 invalid
+      1 method call
+      2 method return
+      3 error
+      4 signal
+   flags (bitewise or)
+      1 no reply expected
+      2 no auto start
+      4 allow interactive authentication
+   protocol version 1
+   message body length bytes
+      remember needs padding
+   message serial
+      remember needs padding
+      >0, ideally sequential
+   header fields
+      unknown fields must be accepted and ignored
+      0 not allowed (don’t send this)
+      1->object path "path" req < method call signal
+      2->string "interface" req < signal
+      3->string "member" req < method call signal
+      4->string "error_name" req < error
+      5->uint32 "reply_serial" req < error method_return
+      6->string "destination" optional
+      7->string "sender" optional
+      8->string "signature" of msg body optional
+      9->uint32 "unix_fds" optional
+
+Valid Names
+===========
+Max length for bus name, interface name, member name 255
+See regex for interface names
+
+Bus Names
+=========
+   Unique starts with ':'
+   Well known doesn’t start with :
+
+   one or more elements separated by '.'
+   at least one character
+
+   [A-Z][a-z][0-9]_-
+      '-' discouraged - ban?
+   All names but unique may not have components beginning with digit
+   May not begin with .
+
+Member Names, Error Names
+=========================
+Use regex from spec
+
+Message Types
+============
+Method Call
+   Must have MEMBER
+   May have INTERFACE, recommended!
+      if not defined, undefined which method will be invoked
+      deliver error in this case
+   Must have PATH
+   Must have DESTINATION if on message bus
+
+   Reply must be returned via REPLY_SERIAL
+      Return or ERROR
+         If Return, signature must be the one requested
+         by caller (or null if void method)
+   UNLESS No_Reply_Expected then nothing, neither error nor method return
+
+Signal
+   No reply, signal includes three fields
+      Path
+      Interface
+      Member
+
+Error
+   Reply serial required
+   May have any arguments, but if first argument is string then that
+      is error message
+
+Security
+========
+   Any protocol violation = drop connection
+
+Authentication protocol
+=======================
+   Client must first send a null byte
+   May be accompanied by credentials on supported systems but not in same stream
+
+   Plain ASCII messages only
+   [A-Z_] for command name followed by space and arguments then \r\n
+Client commands
+
+   AUTH [hex encoded mechanism initial response]
+      0 arguments =>
+         REJECTED
+      1-2 arguments =>
+         REJECTED
+         ||
+         DATA [SASL challenge response data]
+   CANCEL (after AUTH but before BEGIN)
+      REJECTED
+   BEGIN
+      no reply. acknowledges stream of messages is about to begin
+   DATA hex encoded data
+      DATA || OK || REJECTED
+   ERROR human readable string
+      REJECTED
+   NEGOTIATE_UNIX_FD (after OK, before BEGIN)
+      tell server that you can handle UNIX FD passing
+      AGREE_UNIX_FD || ERROR 
+         agree means the server can handle it too
+Server commands
+   OK SERVER_GUID as STRING
+   REJECTED [LIST OF MECHANISMS]
+   DATA hex encoded data
+   AGREE_UNIX_FD
+   ERROR human readable string
+
+Authentication mechanisms
+=========================
+   EXTERNAL
+      no initial challenge
+      hex unix uid or windows sid
+      this will be checked against data provided after null byte
+   DBUS_COOKIE_SHA1
+      no initial challenge
+      hex username
+      hex " " integer id of secret cookie " " randomly generated string
+      client computes
+         server challenge ":" client challenge (random string) ":" cookie*
+         sends hex client challenge " " sha1 digest of above
+      server checks this based on its knowledge, clears cookie
+
+      each server has a cookie context string
+      cookie file in ~/.dbus-keyrings/cookie_context_string
+      if ~/.dbus-keyrings is not 700 then ignore
+
+      cookie file contains list of cookies in format:
+         Sequential ID number " " creation time (epoch seconds) " " cookie (hex encoded bytes to be treated as black box)
+   ANONYMOUS
+      no challenge, accept only when communicating directly with process
+
+Server Addresses
+================
+   transport_name ":" [list of escaped key=value,key=value]
+   escape format:
+      all bytes must be in [-0-9A-Za-z_/.\*]
+      if not, then take byte, convert to hex
+         "%" HEXDIGIT1 HEXDIGIT2
+
+      to unescape, if find "%" then next two characters are hex digits
+      any byte MAY be escaped but only ones outside of range have to be
+
+   multiple addresses may be separated by ";" to be tried in order
+   
+   key "guid" represents unique identifier for server
+      no need to open new connection if we already have one for that server
+
+Server Trnasports
+=================
+   unix: // unix sockets
+      path [filesystem path]
+      or
+      abstract [abstract name]
+      dir / tmpdir (used only in server addresses, treat identically) [directory]
+
+  tcp:
+     host (dns name or ip address)
+     bind (for servers), pick ip address to bind to or '*'
+        optional
+     port (0 = free choice, any other value = fixed)
+     family [ipv4 or ipv6] selects socket family
+
+  autolaunch:
+     Try to find a session bus and launch one if impossible
+
+Properties
+==========
+   Later :) implement basics first
