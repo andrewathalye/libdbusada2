@@ -1,0 +1,10 @@
+library project DBus_Ada_2 extends "gpr/shared" is
+   for Library_Name use "dbusada2";
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj/" & Shared.Build_Mode;
+   for Library_Dir use "lib/";
+   for Library_Kind use "relocatable";
+
+   package Binder renames Shared.Binder;
+   package Linker renames Shared.Linker;
+end DBus_Ada_2;

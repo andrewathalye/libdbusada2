@@ -1,0 +1,48 @@
+abstract project Shared is
+   type Build_Mode_Type is ("dev", "prod", "coverage");
+   Build_Mode : Build_Mode_Type := external ("BUILD_MODE", "dev");
+
+   case Build_Mode is
+      when "coverage" =>
+         for Library_Options use ("--coverage");
+      when others => null;
+   end case;
+
+   package Compiler is
+      Common_Switches := ("-gnatwa", "-gnatwe", "-gnatyy");
+
+      Dev_Switches := Common_Switches & ("-g", "-Og", "-gnata", "-gnatVa");
+      Prod_Switches := Common_Switches & ("-O3", "-gnatp", "-ffast-math");
+      Coverage_Switches := Dev_Switches & ("-fprofile-arcs", "-ftest-coverage");
+
+      case Build_Mode is
+         when "dev" =>
+            for Default_Switches ("Ada") use Dev_Switches;
+         when "prod" =>
+            for Default_Switches ("Ada") use Prod_Switches;
+         when "coverage" =>
+            for Default_Switches ("Ada") use Coverage_Switches;
+      end case;
+   end Compiler;
+
+   package Binder is
+      Common_Switches := ("-shared");
+
+      case Build_Mode is
+         when "dev" | "coverage" =>
+            for Default_Switches ("Ada") use Common_Switches & ("-Es");
+         when "prod" =>
+            for Default_Switches ("Ada") use Common_Switches;
+      end case;
+   end Binder;
+
+   package Linker is
+      case Build_Mode is
+         when "dev" =>  null;
+         when "prod" =>
+            for Default_Switches ("Ada") use ("-Wl,-s", "-Wl,--gc-sections");
+         when "coverage" =>
+            for Default_Switches ("Ada") use ("-fprofile-arcs", "--coverage");
+      end case;
+   end Linker;
+end Shared;
