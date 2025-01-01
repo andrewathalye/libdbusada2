@@ -1,3 +1,4 @@
+with "../d_bus_ada_2";
 
 project Tests extends "shared" is
    for Source_Dirs use ("../src/tests");
