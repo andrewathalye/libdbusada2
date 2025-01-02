@@ -1,7 +1,12 @@
 pragma Ada_2012;
 
 with D_Bus.Types;
-with Interfaces; use type Interfaces.Integer_32;
+   use type D_Bus.Types.Uint32;
+with Interfaces;
+   use type Interfaces.Unsigned_32;
+
+private with Ada.Streams;
+private with Ada.Containers.Doubly_Linked_Lists;
 
 package D_Bus.Messages is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
@@ -14,7 +19,7 @@ package D_Bus.Messages is
    --  Call `Fill` to add arguments to a message
 
    subtype Message_Serial is D_Bus.Types.Uint32
-   with Dynamic_Predicate => D_Bus.Types.Uint32s."+" (Message_Serial) > 0;
+   with Dynamic_Predicate => +Message_Serial > 0;
 
    type Message_Flags is record
       No_Reply_Expected : Boolean;
@@ -29,6 +34,7 @@ package D_Bus.Messages is
         Allow_Interactive_Authentication at 0 range 2 .. 2;
      end record;
    for Message_Flags'Size use 8;
+
    -----------------------
    -- Validity Checking --
    -----------------------
@@ -38,6 +44,9 @@ package D_Bus.Messages is
 
    subtype Interface_Name is String
    with Dynamic_Predicate => Valid_Interface (Interface_Name);
+
+   subtype Error_Name is Interface_Name;
+   --  TODO check whether regex applies
 
    subtype Member_Name is String
    with Dynamic_Predicate => Valid_Member (Member_Name);
@@ -94,15 +103,13 @@ package D_Bus.Messages is
    --  Raised when the requested field is not available
 
    function Object_Path (M : Message) return D_Bus.Types.Object_Path;
-   function M_Interface (M : Message) return D_Bus.Types.Interface_Name;
-   function Member (M : Message) return D_Bus.Types.Member_Name;
-   function Error_Name (M : Message) return D_Bus.Types.Error_Name;
+   function M_Interface (M : Message) return Interface_Name;
+   function Member (M : Message) return Member_Name;
+   function Error (M : Message) return Error_Name;
    function Reply_Serial (M : Message) return Message_Serial;
-   function Destination (M : Message) return D_Bus.Types.Bus_Name;
-   function Sender (M : Message) return D_Bus.Types.Bus_Name;
-   function Signature (M : Message) return D_Bus.Types.Signature;
-   --  TODO deal withh unix fds
-
+   function Destination (M : Message) return Bus_Name;
+   function Sender (M : Message) return Bus_Name;
+   function Signature (M : Message) return D_Bus.Types.D_Signature;
 private
    --  Message types
    type Message_Type is
@@ -116,17 +123,35 @@ private
       Signal => 4);
 
    --  Message endianness
-   type Message_Endianness is (Little, Big);
+   type Message_Endianness is (Big, Little);
    for Message_Endianness'Size use 8;
    for Message_Endianness use
      (Big => Character'Pos ('B'),
       Little => Character'Pos ('l'));
 
    --  Variant field implementation
+   type Field_Type is (F_Invalid, F_Path, F_Interface, F_Member, F_Error_Name,
+      F_Reply_Serial, F_Destination, F_Sender, F_Signature, F_Unix_Fds);
+   for Field_Type'Size use 8;
+   for Field_Type use
+     (F_Invalid => 0,
+      F_Path => 1,
+      F_Interface => 2,
+      F_Member => 3,
+      F_Error_Name => 4,
+      F_Reply_Serial => 5,
+      F_Destination => 6,
+      F_Sender => 7,
+      F_Signature => 8,
+      F_Unix_Fds => 9);
+
    type Field is record
-      Id : D_Bus.Types.Byte;
+      Id : Field_Type;
       Contents : D_Bus.Types.Variant;
    end record;
+
+   package Field_Lists is new Ada.Containers.Doubly_Linked_Lists (Field);
+   subtype Field_List is Field_Lists.List;
 
    --  Message internals
    type U_Message (Valid : Boolean := False) is record
@@ -136,8 +161,18 @@ private
       Protocol_Version : D_Bus.Types.Byte := D_Bus.Types.Bytes."+" (1);
       Body_Length : D_Bus.Types.Uint32;
       Serial : Message_Serial;
-      Fields : Field_List_Access;
-      M_Body : Body_Access;
+      Fields : Field_List;
+      M_Body : D_Bus.Types.Argument_List;
    end record;
+
+   procedure Read
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : out U_Message);
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : U_Message);
+
+   for U_Message'Read use Read;
+   for U_Message'Write use Write;
    --  TODO handle endianness
 end D_Bus.Messages;

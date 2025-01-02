@@ -12,10 +12,10 @@ package D_Bus.Connection is
    ---------------------
    type U_Connection is private;
    --  TODO: A connection object is currently not thread-safe
+   --  TODO limited?
 
    function Connected (C : U_Connection) return Boolean;
 
-   --  TODO is it fine to use predicates?
    subtype Disconnected_Connection is U_Connection
    with Dynamic_Predicate => not Connected (Disconnected_Connection);
 
@@ -24,14 +24,20 @@ package D_Bus.Connection is
 
    procedure Disconnect (C : in out Connected_Connection);
    --  Disconnect and destroy data held by `C`
+   --  TODO make object controlled, auto disconnect on leave scope
 
    --------------------
    -- Stream Support --
    --------------------
    type Alignable_Stream is new Ada.Streams.Root_Stream_Type with private;
    type Alignable_Stream_Access is access all Alignable_Stream;
+   --  A stream which supports aligning data reads and writes.
 
    type Alignment_Type is range 1 .. 8;
+
+   procedure Reset_Align
+     (Stream : not null access Alignable_Stream);
+   --  Reset the stream’s read/write statistics.
 
    procedure Read_Align
      (Stream : not null access Alignable_Stream;

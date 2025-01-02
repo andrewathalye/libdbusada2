@@ -13,10 +13,9 @@ package body D_Bus.Type_Internals is
       pragma Unmodified (Item);
       use D_Bus.Connection;
       ASA : constant Alignable_Stream_Access :=
-         Alignable_Stream (Stream.all)'Access;
+         D_Bus.Connection.Alignable_Stream (Stream.all)'Access;
    begin
-      Align (ASA, Item'Size / 8);
-      --  TODO check
+      D_Bus.Connection.Read_Align (ASA, Item'Size / 8);
    end Read;
 
    procedure Write
@@ -25,10 +24,9 @@ package body D_Bus.Type_Internals is
    is
       use D_Bus.Connection;
       ASA : constant Alignable_Stream_Access :=
-         Alignable_Stream (Stream.all)'Access;
+         D_Bus.Connection.Alignable_Stream (Stream.all)'Access;
    begin
-      Align (ASA, Item'Size / 8);
-      --  TODO check
+      D_Bus.Connection.Write_Align (ASA, Item'Size / 8);
    end Write;
 
    --------------------

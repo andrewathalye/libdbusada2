@@ -4,6 +4,7 @@ with D_Bus.Type_Internals;
 with Interfaces;
 
 with Ada.Finalization;
+with Ada.Containers.Indefinite_Doubly_Linked_Lists;
 private with Ada.Streams;
 
 package D_Bus.Types is
@@ -17,6 +18,14 @@ package D_Bus.Types is
    subtype String_Type is D_Bus.Type_Internals.String_Type;
    type Container_Type is abstract new Ada.Finalization.Controlled
       and Root_Type with private;
+
+   pragma Warnings (Off, "not referenced");
+   function Always_False (L, R : Root_Type'Class) return Boolean is (False);
+   pragma Warnings (On);
+
+   package Argument_Lists is new Ada.Containers.Indefinite_Doubly_Linked_Lists
+     (Root_Type'Class, Always_False);
+   subtype Argument_List is Argument_Lists.List;
 
    --------------
    -- Wrappers --

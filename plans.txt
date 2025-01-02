@@ -110,7 +110,7 @@ Message Format
 Valid Names
 ===========
 Max length for bus name, interface name, member name 255
-See regex for interface names
+See regex for interface names and error names
 
 Bus Names
 =========
@@ -204,7 +204,7 @@ Authentication mechanisms
    DBUS_COOKIE_SHA1
       no initial challenge
       hex username
-      hex " " integer id of secret cookie " " randomly generated string
+      hex cookie context " " integer id of secret cookie " " randomly generated string
       client computes
          server challenge ":" client challenge (random string) ":" cookie*
          sends hex client challenge " " sha1 digest of above
