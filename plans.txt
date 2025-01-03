@@ -105,6 +105,7 @@ Message Format
       6->string "destination" optional
       7->string "sender" optional
       8->string "signature" of msg body optional
+         if omitted, msg body must be EMPTY
       9->uint32 "unix_fds" optional
 
 Valid Names

@@ -5,9 +5,17 @@ with Ada.Streams;
 private with GNATCOLL.Strings;
 
 package D_Bus.Type_Internals is
-   --  Type Classes
+   ---------------------
+   -- Fast Signatures --
+   ---------------------
+   subtype Single_Signature is String;
+   subtype Contents_Signature is String;
+
+   ------------------
+   -- Type Classes --
+   ------------------
    type Root_Type is interface;
-   function Signature (X : Root_Type) return String is abstract;
+   function Signature (X : Root_Type) return Single_Signature is abstract;
 
    type Basic_Type is interface and Root_Type;
 
@@ -35,13 +43,13 @@ package D_Bus.Type_Internals is
    -- Basic Types --
    -----------------
    generic
-      Tag : String;
+      Tag : Single_Signature;
       type Inner is private;
    package Basic_Wrappers is
       type Outer is new Padding and Basic_Type with private;
       function "+" (X : Inner) return Outer;
       function "+" (X : Outer) return Inner;
-      function Signature (X : Outer) return String is (Tag);
+      function Signature (X : Outer) return Single_Signature is (Tag);
    private
       type Outer is new Padding and Basic_Type with record
          I : Inner;
@@ -52,7 +60,7 @@ package D_Bus.Type_Internals is
    -- String Types --
    ------------------
    generic
-      Tag : String;
+      Tag : Single_Signature;
       type Data_Length_Type is mod <>;
    package String_Wrappers is
       type Outer is new String_Type with private;
@@ -60,7 +68,7 @@ package D_Bus.Type_Internals is
       function Length (X : Outer) return Natural;
       function "+" (X : Outer) return String;
       function "+" (X : String) return Outer;
-      function Signature (X : Outer) return String is (Tag);
+      function Signature (X : Outer) return Single_Signature is (Tag);
    private
       type Outer is new String_Type with record
          I : GNATCOLL.Strings.XString;

@@ -42,10 +42,10 @@ package body D_Bus.Types is
    -----------
    -- Valid --
    -----------
-   function Valid (X : U_Variant) return Boolean is
+   function Valid_Variant (X : U_Variant) return Boolean is
    begin
       return X.I /= null;
-   end Valid;
+   end Valid_Variant;
 
    ---------
    -- "+" --
