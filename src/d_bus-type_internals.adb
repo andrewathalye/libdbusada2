@@ -32,7 +32,7 @@ package body D_Bus.Type_Internals is
    --------------------
    -- Basic_Wrappers --
    --------------------
-   package body Basic_Wrappers is
+   package body Fixed_Wrappers is
       ---------
       -- "+" --
       ---------
@@ -48,7 +48,7 @@ package body D_Bus.Type_Internals is
       begin
          return X.I;
       end "+";
-   end Basic_Wrappers;
+   end Fixed_Wrappers;
 
    ---------------------
    -- String_Wrappers --
