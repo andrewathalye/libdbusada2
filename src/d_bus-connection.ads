@@ -33,23 +33,19 @@ package D_Bus.Connection is
    type Alignable_Stream_Access is access all Alignable_Stream;
    --  A stream which supports aligning data reads and writes.
 
-   type Alignment_Type is range 1 .. 8;
-
-   procedure Reset_Align
+   procedure Reset_Count
      (Stream : not null access Alignable_Stream);
    --  Reset the stream’s read/write statistics.
 
-   procedure Read_Align
-     (Stream : not null access Alignable_Stream;
-      Alignment : Alignment_Type);
-   --  Align the stream to the given alignment,
-   --  discarding bytes until alignment is achieved.
+   function Read_Count
+     (Stream : not null access Alignable_Stream)
+     return Ada.Streams.Stream_Element_Offset;
+   --  Get the current read offset into `Stream`
 
-   procedure Write_Align
-     (Stream : not null access Alignable_Stream;
-      Alignment : Alignment_Type);
-   --  Align the stream to the given alignment.
-   --  Insert null bytes until alignment is achieved.
+   function Write_Count
+     (Stream : not null access Alignable_Stream)
+     return Ada.Streams.Stream_Element_Offset;
+   --  Get the current write offset into `Stream`
 
    ---------------------
    -- Message Support --

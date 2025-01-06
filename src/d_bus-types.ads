@@ -100,7 +100,7 @@ package D_Bus.Types is
    package Strings is new String_Wrappers
      (Type_Code => "s",
       Data_Length_Type => Interfaces.Unsigned_32,
-      Inner_Type => String);
+      External_Type => String);
    subtype D_String is Strings.Outer;
 
    subtype Object_Path is D_Bus.Type_Internals.U_Object_Path;
@@ -108,14 +108,14 @@ package D_Bus.Types is
    package Object_Paths is new String_Wrappers
      (Type_Code => "o",
       Data_Length_Type => Interfaces.Unsigned_32,
-      Inner_Type => Object_Path);
+      External_Type => Object_Path);
    subtype D_Object_Path is Object_Paths.Outer;
    --  For a lightweight Ada type, use `Object_Path`
 
    package Signatures is new String_Wrappers
      (Type_Code => "g",
       Data_Length_Type => Interfaces.Unsigned_8,
-      Inner_Type => Contents_Signature);
+      External_Type => Contents_Signature);
    subtype D_Signature is Signatures.Outer;
    --  For a lightweight Ada type, use `Single_Signature`
    --  or `Contents_Signature`
@@ -130,14 +130,14 @@ package D_Bus.Types is
    --  use `Fixed_Container_Type'Class`
 
    subtype Numeric_Iterable_Container_Type
-      is D_Bus.Type_Internals.Containers.Numeric_Iterable_Container_Type;
+      is D_Bus.Type_Internals.Containers.Numeric_Container_Type;
    generic package Arrays renames D_Bus.Type_Internals.Containers.Arrays;
    --  All D-Bus arrays are instances of this type.
    --  At runtime the actual type is unlikely to be known,
    --  use `Numeric_Iterable_Container_Type'Class`
 
    subtype Keyed_Iterable_Container_Type
-      is D_Bus.Type_Internals.Containers.Keyed_Iterable_Container_Type;
+      is D_Bus.Type_Internals.Containers.Keyed_Container_Type;
    generic package Dicts renames D_Bus.Type_Internals.Containers.Dicts;
    --  All D-Bus dicts are generic instances of this type.
    --  At runtime the actual type is unlikely to be known,
