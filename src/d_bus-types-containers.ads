@@ -4,8 +4,8 @@ with Ada.Containers.Indefinite_Holders;
 with Ada.Streams;
 with Ada.Iterator_Interfaces;
 
-private with Ada.Containers.Vectors;
-private with Ada.Containers.Hashed_Maps;
+private with Ada.Containers.Indefinite_Vectors;
+private with Ada.Containers.Indefinite_Hashed_Maps;
 
 package D_Bus.Types.Containers is
    ---------------------
@@ -141,13 +141,13 @@ package D_Bus.Types.Containers is
 
    generic
       Inner_Signature : Single_Signature;
-      type Element_Type is new Root_Type with private;
    package Arrays is
       type D_Array is new Numeric_Container_Type with private;
    private
       use type Single_Signature;
 
-      package Vectors is new Ada.Containers.Vectors (Natural, Element_Type);
+      package Vectors is new Ada.Containers.Indefinite_Vectors
+        (Natural, Root_Type'Class);
 
       type D_Array is new Numeric_Container_Type with record
          Inner : Vectors.Vector;
@@ -224,7 +224,7 @@ package D_Bus.Types.Containers is
      (Keyed_Container_Cursor, Has_Element);
 
    type Keyed_Container_Type is interface
-      and Keyed_Container_Iterator.Reversible_Iterator
+      and Keyed_Container_Iterator.Forward_Iterator
       and Container_Type
    with
       Constant_Indexing => Constant_Reference_KCT,
@@ -244,7 +244,7 @@ package D_Bus.Types.Containers is
       New_Item : Root_Type'Class) is abstract;
 
    function Has_Element
-     (Container : Numeric_Container_Type;
+     (Container : Keyed_Container_Type;
       Key : Basic_Type'Class) return Boolean is abstract;
 
    function Key (C : Keyed_Container_Cursor) return Basic_Type'Class;
@@ -252,18 +252,15 @@ package D_Bus.Types.Containers is
 
    generic
       Key_Signature : Single_Signature;
-      type Key_Type is new Basic_Type with private;
-
       Value_Signature : Single_Signature;
-      type Value_Type is new Root_Type with private;
    package Dicts is
       type Dict is new Keyed_Container_Type with private;
    private
-      function Hash (Key : Key_Type) return Ada.Containers.Hash_Type;
+      function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
 
-      package Hash_Maps is new Ada.Containers.Hashed_Maps
-        (Key_Type        => Key_Type,
-         Element_Type    => Value_Type,
+      package Hash_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+        (Key_Type        => Basic_Type'Class,
+         Element_Type    => Root_Type'Class,
          Hash            => Hash,
          Equivalent_Keys => "=");
 
@@ -312,15 +309,6 @@ package D_Bus.Types.Containers is
          Position : Keyed_Container_Cursor) return Keyed_Container_Cursor;
 
       overriding
-      function Last
-        (Object : Dict) return Keyed_Container_Cursor;
-
-      overriding
-      function Previous
-        (Object : Dict;
-         Position : Keyed_Container_Cursor) return Keyed_Container_Cursor;
-
-      overriding
       function Constant_Reference_KCT
         (Container : aliased Dict;
          Key : Basic_Type'Class) return Constant_Reference_Type;
@@ -328,7 +316,13 @@ package D_Bus.Types.Containers is
       overriding
       function Reference_KCT
         (Container : aliased in out Dict;
-         Index : Basic_Type'Class) return Reference_Type;
+         Key : Basic_Type'Class) return Reference_Type;
+
+      overriding
+      function Has_Element
+        (Container : Dict;
+         Key : Basic_Type'Class) return Boolean
+      is (Container.Inner.Contains (Key));
    end Dicts;
 
    --------------
@@ -347,13 +341,14 @@ private
    ----------------
    No_Index : constant Integer := -1;
    type Numeric_Container_Cursor is limited record
-      Container : not null access Numeric_Container_Type'Class;
+      Container : not null access constant Numeric_Container_Type'Class;
       Index : Integer;
    end record;
 
+   No_Key : access Basic_Type'Class := null;
    type Keyed_Container_Cursor is limited record
-      Container : not null access Keyed_Container_Type'Class;
-      Key : not null access Basic_Type'Class;
+      Container : not null access constant Keyed_Container_Type'Class;
+      Key : access constant Basic_Type'Class;
    end record;
 
    type Constant_Reference_Type
