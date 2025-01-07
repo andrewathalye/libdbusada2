@@ -1,10 +1,8 @@
 pragma Ada_2012;
 
-with D_Bus.Types;
-   use type D_Bus.Types.Uint32;
-   use type D_Bus.Types.D_String;
+with D_Bus.Types.Instances;
+with D_Bus.Types.Containers;
 with Interfaces;
-   use type Interfaces.Unsigned_32;
 
 with Ada.Streams;
 private with Ada.Containers.Ordered_Maps;
@@ -70,17 +68,17 @@ package D_Bus.Messages is
    function Valid_Member (X : String) return Boolean;
    function Valid_Bus (X : String) return Boolean;
 
-   subtype Interface_Name is D_Bus.Types.D_String
-   with Dynamic_Predicate => Valid_Interface (+Interface_Name);
+   subtype Interface_Name is String
+   with Dynamic_Predicate => Valid_Interface (Interface_Name);
 
    subtype Error_Name is Interface_Name;
    --  TODO check whether regex inherits
 
-   subtype Member_Name is D_Bus.Types.D_String
-   with Dynamic_Predicate => Valid_Member (+Member_Name);
+   subtype Member_Name is String
+   with Dynamic_Predicate => Valid_Member (Member_Name);
 
-   subtype Bus_Name is D_Bus.Types.D_String
-   with Dynamic_Predicate => Valid_Bus (+Bus_Name);
+   subtype Bus_Name is String
+   with Dynamic_Predicate => Valid_Bus (Bus_Name);
 
    function Valid_Message (M : U_Message) return Boolean;
    --  Check whether a message is valid and may
@@ -99,15 +97,15 @@ package D_Bus.Messages is
    function Compose_Call
      (Flags : Message_Flags := Default_Message_Flags;
       Path  : D_Bus.Types.Object_Path;
-      M_Interface : Interface_Name := +"";
+      M_Interface : Interface_Name := "";
       Member : Member_Name;
-      Destination : Bus_Name := +"") return Message;
+      Destination : Bus_Name := "") return Message;
    --  Prepare a message call
 
    function Compose_Return
      (Flags : Message_Flags := Default_Message_Flags;
       Reply_To : Message;
-      Destination : Bus_Name := +"") return Message;
+      Destination : Bus_Name := "") return Message;
    --  Prepare a message return
    --
    --  Raises `No_Reply_Expected` if `Reply_To` does
@@ -117,7 +115,7 @@ package D_Bus.Messages is
       (Flags : Message_Flags := Default_Message_Flags;
        Error : Error_Name;
        Reply_To : Message;
-       Destination : Bus_Name := +"") return Message;
+       Destination : Bus_Name := "") return Message;
    --  Prepare an error message
 
    function Compose_Signal
@@ -163,14 +161,11 @@ package D_Bus.Messages is
 
    function Destination (M : Message) return Bus_Name;
    function Sender (M : Message) return Bus_Name;
-   function Signature (M : Message) return D_Bus.Types.D_Signature;
+   function Signature (M : Message) return D_Bus.Types.Contents_Signature;
    --  Optional: may raise `Field_Absent`
 
    function Arguments (M : Message) return D_Bus.Types.Argument_List;
 private
-   use type D_Bus.Types.Byte;
-   use type D_Bus.Types.Variant;
-
    Default_Message_Flags : constant Message_Flags := (others => <>);
    --  Message_Flags with everything set to default
 
@@ -188,6 +183,8 @@ private
    ME_Table_From_Ada : constant ME_Table_From_Ada_T := (Big, Little);
    ME_Table_To_Ada : constant ME_Table_To_Ada_T :=
      (System.High_Order_First, System.Low_Order_First);
+   Default_Message_Endianness : constant Message_Endianness :=
+      ME_Table_From_Ada (System.Default_Bit_Order);
    --  TODO actually implement
 
    --------------------
@@ -208,44 +205,35 @@ private
       F_Signature => 8,
       F_Unix_Fds => 9);
 
-   type Field is record
-      Id : Field_Type;
-      Contents : D_Bus.Types.Variant;
-   end record;
-
+   use type D_Bus.Types.Containers.Variant;
    package Field_Maps is new Ada.Containers.Ordered_Maps
-     (Field_Type, D_Bus.Types.Variant);
-   subtype Field_Map is Field_Maps.Map;
+     (Key_Type => Field_Type,
+      Element_Type => D_Bus.Types.Containers.Variant);
 
    -----------------------
    -- Message Internals --
    -----------------------
-   Default_Protocol_Version : constant D_Bus.Types.Byte := +1;
-
-   subtype Message_Serial is D_Bus.Types.Uint32
-   with Dynamic_Predicate => +Message_Serial > 0;
+   Default_Protocol_Version : constant := 1;
+   type Message_Serial is range 1 .. Interfaces.Unsigned_32'Last;
+   for Message_Serial'Size use 32;
 
    --  Note: Compiler optimisation causes the case not to match
    pragma Style_Checks (Off, Little);
    --  this is not important, just suppress the warning
 
    type U_Message (Valid : Boolean := False) is record
-      --  Unpadded, do not depend on byte order
-      Endianness : Message_Endianness :=
-        ME_Table_From_Ada (System.Default_Bit_Order);
+      Endianness : Message_Endianness := Default_Message_Endianness;
       M_Type : Message_Type;
       Flags : Message_Flags;
-      Protocol_Version : D_Bus.Types.Byte := Default_Protocol_Version;
 
       --  Padded, depend on byte order
-      Body_Length : D_Bus.Types.Uint32 := +0;
       Serial : Message_Serial;
-      Fields : Field_Map := Field_Maps.Empty_Map;
+      Fields : Field_Maps.Map;
 
       --  Body, not header proper
-      Arguments : D_Bus.Types.Argument_List :=
-         D_Bus.Types.Argument_Lists.Empty_List;
+      Arguments : D_Bus.Types.Argument_List;
    end record;
+   --  Note: this is not the internal representation over the wire
 
    procedure Read
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;

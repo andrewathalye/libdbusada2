@@ -7,7 +7,7 @@ with Ada.Iterator_Interfaces;
 private with Ada.Containers.Vectors;
 private with Ada.Containers.Hashed_Maps;
 
-package D_Bus.Type_Internals.Containers is
+package D_Bus.Types.Containers is
    ---------------------
    -- Shared Packages --
    ---------------------
@@ -44,8 +44,8 @@ package D_Bus.Type_Internals.Containers is
 
       type Inner_Array is array (Natural range <>) of Root_Type_Holders.Holder;
 
-      Types : constant D_Bus.Type_Internals.Single_Signature_Array :=
-        D_Bus.Type_Internals.Split_Signature (Inner_Signature);
+      Types : constant D_Bus.Types.Single_Signature_Array :=
+        D_Bus.Types.Split_Signature (Inner_Signature);
       --  Shared for all objects of this type
 
       type Struct is new Fixed_Container_Type with record
@@ -69,7 +69,7 @@ package D_Bus.Type_Internals.Containers is
 
       overriding
       function Signature (X : Struct) return Single_Signature
-      is (Single_Signature ("(" & X.Contents & ")"));
+      is ("(" & Single_Signature (X.Contents) & ")");
 
       overriding
       function Size (X : Struct) return Ada.Streams.Stream_Element_Count;
@@ -170,7 +170,7 @@ package D_Bus.Type_Internals.Containers is
 
       overriding
       function Signature (X : D_Array) return Single_Signature
-      is (Single_Signature ("a" & X.Contents));
+      is ("a" & Single_Signature (X.Contents));
 
       overriding
       function Size (X : D_Array) return Ada.Streams.Stream_Element_Count;
@@ -294,7 +294,7 @@ package D_Bus.Type_Internals.Containers is
 
       overriding
       function Signature (X : Dict) return Single_Signature
-      is (Single_Signature ("a{" & X.Contents & "}"));
+      is ("a{" & Key_Signature & Single_Signature (X.Contents) & "}");
 
       overriding
       function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
@@ -375,7 +375,7 @@ private
 
    overriding
    function Signature (X : Variant) return Single_Signature
-   is (Single_Signature ("v" & X.Contents));
+   is ("v" & Single_Signature (X.Contents));
 
    overriding
    function Size (X : Variant) return Ada.Streams.Stream_Element_Count;
@@ -391,4 +391,4 @@ private
       Item : Variant);
    for Variant'Read use Read_Variant;
    for Variant'Write use Write_Variant;
-end D_Bus.Type_Internals.Containers;
+end D_Bus.Types.Containers;

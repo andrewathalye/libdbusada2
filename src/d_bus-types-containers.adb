@@ -3,7 +3,7 @@ pragma Ada_2012;
 with GNATCOLL.Strings;
 with Interfaces;
 
-package body D_Bus.Type_Internals.Containers is
+package body D_Bus.Types.Containers is
 
    -------------
    -- Structs --
@@ -555,4 +555,4 @@ package body D_Bus.Type_Internals.Containers is
       raise Program_Error with "Unimplemented procedure Write_Variant";
    end Write_Variant;
 
-end D_Bus.Type_Internals.Containers;
+end D_Bus.Types.Containers;
