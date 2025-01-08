@@ -1,6 +1,8 @@
 pragma Ada_2012;
 
 with Ada.Strings.Hash;
+with Ada.Tags;
+with Ada.Text_IO;
 with GNATCOLL.Strings;
 with Interfaces;
 
@@ -295,6 +297,18 @@ package body D_Bus.Types.Containers is
             in Container.Inner.First_Index .. Container.Inner.Last_Index;
       end Has_Element;
 
+      overriding procedure Append
+        (Container : out D_Array;
+         Element : Root_Type'Class)
+      is
+      begin
+         if Element.Signature /= Inner_Signature then
+            raise Constraint_Error;
+         end if;
+
+         Container.Inner.Append (Element);
+      end Append;
+
    end Arrays;
 
    ----------------------
@@ -410,6 +424,11 @@ package body D_Bus.Types.Containers is
          Value  :        Root_Type'Class)
       is
       begin
+         Ada.Text_IO.Put_Line ("INSERT");
+         Ada.Text_IO.Put_Line (Key.Image);
+         Ada.Text_IO.Put_Line (Ada.Tags.Expanded_Name (Value'Tag));
+         Ada.Text_IO.Put_Line (Numeric_Container_Type'Class (Value).Image);
+
          Type_Check (Key, Value);
          Container.Inner.Insert (Key, Value);
       end Insert;

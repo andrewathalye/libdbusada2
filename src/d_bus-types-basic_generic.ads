@@ -17,6 +17,9 @@ package D_Bus.Types.Basic_Generic is
 
       function "+" (X : Inner) return Outer;
       function "+" (X : Outer) return Inner;
+
+      overriding
+      function Image (X : Outer) return String;
    private
       package Padded_Inners is new Padded_Types (Inner, Inner'Size / 8);
       type Outer is new Basic_Type with record
@@ -30,10 +33,6 @@ package D_Bus.Types.Basic_Generic is
       overriding
       function Size
         (X : Outer) return Ada.Streams.Stream_Element_Count is (Inner'Size);
-
-      overriding
-      function Image (X : Outer) return String;
-      --  Note: Implemented in body for Ada version compat
    end Fixed_Wrappers;
 
    ------------------
@@ -48,6 +47,9 @@ package D_Bus.Types.Basic_Generic is
 
       function "+" (X : Outer) return External_Type;
       function "+" (X : External_Type) return Outer;
+
+      overriding
+      function Image (X : Outer) return String;
    private
       package Padded_Data_Length_Types
       is new Padded_Types (Data_Length_Type, Data_Length_Type'Size / 8);
@@ -88,10 +90,5 @@ package D_Bus.Types.Basic_Generic is
       overriding
       function Size
         (X : Outer) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function Image (X : Outer) return String;
-      --  Note: moved to body to avoid a compiler crash due
-      --  to overloaded types
    end String_Wrappers;
 end D_Bus.Types.Basic_Generic;

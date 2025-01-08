@@ -1,0 +1,11 @@
+{
+  "languageserver": {
+    "ada": {
+      "settings": {
+        "ada": {
+          "projectFile": "/home/andrew/src/ada/libdbusada2/gpr/tests.gpr"
+        }
+      }
+    }
+  }
+}

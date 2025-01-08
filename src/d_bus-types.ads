@@ -23,12 +23,16 @@ package D_Bus.Types is
    subtype Single_Signature is U_Single_Signature
    with Dynamic_Predicate =>
       Validate_Single_Signature (Single_Signature);
+   --  Note: This does NOT check container type nesting.
+   --  This omission is out of consideration for performance.
+   --  All other specified signature rules are checked.
 
    function Validate_Contents_Signature
      (X : U_Contents_Signature) return Boolean;
    subtype Contents_Signature is U_Contents_Signature
    with Dynamic_Predicate =>
       Validate_Contents_Signature (Contents_Signature);
+   --  A type which contains a list of valid `Single_Signature`s
 
    -------------------------
    -- Unbounded Signature --
@@ -40,6 +44,8 @@ package D_Bus.Types is
       To_Lower => Ada.Characters.Handling.To_Lower,
       To_Upper => Ada.Characters.Handling.To_Upper);
    subtype Unbounded_Single_Signature is Unbounded_Single_Signatures.XString;
+   --  This type does not perform checking!
+   --  Convert to `Single_Signature` before use if source is untrusted.
 
    type Single_Signature_Array is array (Positive range <>)
       of Unbounded_Single_Signature;

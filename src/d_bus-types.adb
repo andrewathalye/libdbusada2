@@ -42,8 +42,13 @@ package body D_Bus.Types is
          | 'h' | 's' | 'o' | 'g';
    --  Only basic D-Bus types
 
-   function Split_Signature
-     (X : Contents_Signature) return Single_Signature_Array
+   function U_Split_Signature
+     (X : U_Contents_Signature) return Single_Signature_Array;
+   --  Exactly like the canonical `Split_Signature` but it
+   --  performs no validation on `X`
+
+   function U_Split_Signature
+     (X : U_Contents_Signature) return Single_Signature_Array
    is
       X_USS : constant U_Single_Signature := U_Single_Signature (X);
       --  Note: This will often be INVALID
@@ -56,9 +61,10 @@ package body D_Bus.Types is
          Last : out Positive) return Single_Signature
       is
       begin
+         Put_Line ("U_SS.RS");
          if X (First) in Sig_Solitary then
             Last := First;
-            return X_USS (First .. First);
+            return X_USS (First .. Last);
          end if;
 
          --  Non-solitary elements
@@ -135,13 +141,15 @@ package body D_Bus.Types is
       end Read_Single_Signature;
 
       package Single_Signature_Vectors is new Ada.Containers.Indefinite_Vectors
-        (Natural, Single_Signature);
+        (Positive, Single_Signature);
 
       --  Variables
       Result_Vector : Single_Signature_Vectors.Vector;
       First : Positive := X'First;
       Last : Natural := 0;
    begin
+      Put_Line ("U_SS: " & String (X));
+
       --  Read all single signatures
       while Last < X'Last loop
          Result_Vector.Append (Read_Single_Signature (First, Last));
@@ -160,12 +168,16 @@ package body D_Bus.Types is
 
          return Result;
       end;
-   end Split_Signature;
+   end U_Split_Signature;
+
+   function Split_Signature
+     (X : Contents_Signature) return Single_Signature_Array
+   is (U_Split_Signature (X));
 
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean
    is
    begin
-      Ada.Text_IO.Put_Line ("Validate " & String (X));
+      Ada.Text_IO.Put_Line ("VS: " & String (X));
       --  A type must not be empty
       if X'Length = 0 then
          return False;
@@ -208,8 +220,8 @@ package body D_Bus.Types is
 
             --  Check arrays via conversion
             declare
-               SSA : constant Single_Signature_Array := Split_Signature
-                 (Contents_Signature (X (X'First + 1 .. X'Last)));
+               SSA : constant Single_Signature_Array := U_Split_Signature
+                 (U_Contents_Signature (X (X'First + 1 .. X'Last)));
                pragma Unreferenced (SSA);
             begin
                null;
@@ -224,8 +236,8 @@ package body D_Bus.Types is
 
             --  Check contents via conversion
             declare
-               SSA : constant Single_Signature_Array := Split_Signature
-                 (Contents_Signature (X (X'First + 1 .. X'First - 1)));
+               SSA : constant Single_Signature_Array := U_Split_Signature
+                 (U_Contents_Signature (X (X'First + 1 .. X'Last - 1)));
                pragma Unreferenced (SSA);
             begin
                null;
@@ -244,16 +256,17 @@ package body D_Bus.Types is
      (X : U_Contents_Signature) return Boolean
    is
    begin
+      Ada.Text_IO.Put_Line ("VC: " & String (X));
+
       --  Length check
       if X'Length > 255 then
          return False;
       end if;
 
       --  The conversion actually performs the check
-      --  TODO can this cause an infinite loop?
-      --  only one way to find out :)
+      --  Note: We use the unchecked variant to avoid an infinite loop
       declare
-         SSA : constant Single_Signature_Array := Split_Signature (X);
+         SSA : constant Single_Signature_Array := U_Split_Signature (X);
          pragma Unreferenced (SSA);
       begin
          null;

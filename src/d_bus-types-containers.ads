@@ -39,6 +39,23 @@ package D_Bus.Types.Containers is
       --  used. This can be achieved by reading it from a Stream
       --  or calling `Set` manually.
       --  TODO enforce this or we might end up with problems
+
+      overriding
+      function Image (X : Struct) return String;
+
+      overriding
+      function Get
+        (Container : Struct;
+         Index : Natural) return Root_Type'Class;
+
+      overriding
+      procedure Set
+        (Container : out Struct;
+         Index : Natural;
+         Value : Root_Type'Class);
+
+      overriding
+      function Count (Container : Struct) return Natural;
    private
       type Inner_Array is array (Natural range <>) of Root_Type_Holders.Holder;
 
@@ -73,23 +90,14 @@ package D_Bus.Types.Containers is
       function Size (X : Struct) return Ada.Streams.Stream_Element_Count;
 
       overriding
-      function Image (X : Struct) return String;
+      function Count (Container : Struct) return Natural
+      is (Container.Inner'Length);
 
       overriding
       function Get
         (Container : Struct;
          Index : Natural) return Root_Type'Class
       is (Container.Inner (Index).Element);
-
-      overriding
-      procedure Set
-        (Container : out Struct;
-         Index : Natural;
-         Value : Root_Type'Class);
-
-      overriding
-      function Count (Container : Struct) return Natural
-      is (Container.Inner'Length);
    end Structs;
 
    --------------------------------
@@ -153,10 +161,22 @@ package D_Bus.Types.Containers is
    function Iterate_NCT (Container : Numeric_Container_Type'Class)
       return Numeric_Container_Iterator'Class is (Container);
 
+   procedure Append
+     (Container : out Numeric_Container_Type;
+      Element : Root_Type'Class) is abstract;
+
    generic
       Inner_Signature : Single_Signature;
    package Arrays is
       type D_Array is new Numeric_Container_Type with private;
+
+      overriding
+      function Image (X : D_Array) return String;
+
+      overriding
+      procedure Append
+        (Container : out D_Array;
+         Element : Root_Type'Class);
    private
       package Vectors is new Ada.Containers.Indefinite_Vectors
         (Natural, Root_Type'Class);
@@ -186,9 +206,6 @@ package D_Bus.Types.Containers is
 
       overriding
       function Size (X : D_Array) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function Image (X : D_Array) return String;
 
       overriding
       function First
@@ -293,6 +310,15 @@ package D_Bus.Types.Containers is
       Value_Signature : Single_Signature;
    package Dicts is
       type Dict is new Keyed_Container_Type with private;
+
+      overriding
+      procedure Insert
+        (Container : in out Dict;
+         Key : Basic_Type'Class;
+         Value : Root_Type'Class);
+
+      overriding
+      function Image (X : Dict) return String;
    private
       function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
 
@@ -318,12 +344,6 @@ package D_Bus.Types.Containers is
       for Dict'Write use Write;
 
       overriding
-      procedure Insert
-        (Container : in out Dict;
-         Key : Basic_Type'Class;
-         Value : Root_Type'Class);
-
-      overriding
       function Contents (X : Dict) return Contents_Signature
       is (Contents_Signature (Key_Type_Code & Value_Signature));
 
@@ -333,9 +353,6 @@ package D_Bus.Types.Containers is
 
       overriding
       function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function Image (X : Dict) return String;
 
       overriding
       function First
@@ -377,12 +394,15 @@ package D_Bus.Types.Containers is
    -- Variants --
    --------------
    type Variant is new Container_Type with private;
-   --  Note: Raises `Initialisation_Required` if left
-   --  uninitialised!
+   --  Note: MUST be initialised or it will raise
+   --  `Initialisation_Required`
 
    function "+" (X : Root_Type'Class) return Variant;
    function Get (X : Variant) return Root_Type'Class;
    function "+" (X : Variant) return Root_Type'Class renames Get;
+
+   overriding
+   function Image (X : Variant) return String;
 private
    ----------------
    -- Containers --
@@ -419,20 +439,19 @@ private
 
    overriding
    function Signature (X : Variant) return Single_Signature
-   is ("v" & Single_Signature (X.Contents));
+   is ("v");
 
    overriding
    function Size (X : Variant) return Ada.Streams.Stream_Element_Count;
 
-   overriding
-   function Image (X : Variant) return String;
-
    procedure Read_Variant
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item : out Variant);
+
    procedure Write_Variant
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item : Variant);
+
    for Variant'Read use Read_Variant;
    for Variant'Write use Write_Variant;
 end D_Bus.Types.Containers;
