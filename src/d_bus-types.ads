@@ -6,8 +6,6 @@ with Ada.Containers.Indefinite_Doubly_Linked_Lists;
 
 with GNATCOLL.Strings_Impl;
 
-private with Ada.Containers.Indefinite_Holders;
-
 package D_Bus.Types is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
 
@@ -38,7 +36,7 @@ package D_Bus.Types is
    package Unbounded_Single_Signatures is new GNATCOLL.Strings_Impl.Strings
      (SSize            => GNATCOLL.Strings_Impl.Optimal_String_Size,
       Character_Type   => Signature_Element,
-      Character_String => Single_Signature,
+      Character_String => U_Single_Signature,
       To_Lower => Ada.Characters.Handling.To_Lower,
       To_Upper => Ada.Characters.Handling.To_Upper);
    subtype Unbounded_Single_Signature is Unbounded_Single_Signatures.XString;
@@ -84,6 +82,8 @@ package D_Bus.Types is
      (Root_Type'Class);
    subtype Argument_List is Argument_Lists.List;
    function Signature (X : Argument_List) return Contents_Signature;
+   function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count;
+   --  Size in bytes of the arguments if serialised without padding
 
    -------------
    -- Padding --

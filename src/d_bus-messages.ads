@@ -1,12 +1,9 @@
 pragma Ada_2012;
 
-with D_Bus.Types.Instances;
 with D_Bus.Types.Containers;
-with Interfaces;
 
 with Ada.Streams;
 private with Ada.Containers.Ordered_Maps;
-private with System;
 
 package D_Bus.Messages is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
@@ -14,10 +11,19 @@ package D_Bus.Messages is
    ------------------
    -- Base Message --
    ------------------
-   type U_Message is limited private;
+   type Message is limited private;
    --  Underlying message type. See `Message` for documentation.
-   --  TODO limited?
-   --  Note message serial should not be reused...
+   --  Note message serial must not be reused...
+
+   procedure Read
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : out Message);
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : Message);
+
+   for Message'Read use Read;
+   for Message'Write use Write;
 
    -------------------
    -- Message Types --
@@ -80,15 +86,6 @@ package D_Bus.Messages is
    subtype Bus_Name is String
    with Dynamic_Predicate => Valid_Bus (Bus_Name);
 
-   function Valid_Message (M : U_Message) return Boolean;
-   --  Check whether a message is valid and may
-   --  be sent over a connection.
-
-   subtype Message is U_Message
-   with Dynamic_Predicate => Valid_Message (Message);
-   --  A Valid D-Bus Message. Produce one as follows:
-   --  Compose_X -> Add_Arguments -> [Send over the wire]
-
    -------------------------
    -- Message Composition --
    -------------------------
@@ -127,7 +124,7 @@ package D_Bus.Messages is
 
    procedure Add_Arguments
       (M : out Message;
-       Arguments : D_Bus.Types.Argument_List);
+       Arguments : in out D_Bus.Types.Argument_List);
    --  Add arguments to a message
 
    ---------------------
@@ -169,24 +166,6 @@ private
    Default_Message_Flags : constant Message_Flags := (others => <>);
    --  Message_Flags with everything set to default
 
-   -------------------------
-   --  Message Endianness --
-   -------------------------
-   type Message_Endianness is (Big, Little);
-   for Message_Endianness'Size use 8;
-   for Message_Endianness use
-     (Big => Character'Pos ('B'),
-      Little => Character'Pos ('l'));
-
-   type ME_Table_From_Ada_T is array (System.Bit_Order) of Message_Endianness;
-   type ME_Table_To_Ada_T is array (Message_Endianness) of System.Bit_Order;
-   ME_Table_From_Ada : constant ME_Table_From_Ada_T := (Big, Little);
-   ME_Table_To_Ada : constant ME_Table_To_Ada_T :=
-     (System.High_Order_First, System.Low_Order_First);
-   Default_Message_Endianness : constant Message_Endianness :=
-      ME_Table_From_Ada (System.Default_Bit_Order);
-   --  TODO actually implement
-
    --------------------
    -- Message Fields --
    --------------------
@@ -214,34 +193,18 @@ private
    -- Message Internals --
    -----------------------
    Default_Protocol_Version : constant := 1;
-   type Message_Serial is range 1 .. Interfaces.Unsigned_32'Last;
-   for Message_Serial'Size use 32;
 
-   --  Note: Compiler optimisation causes the case not to match
-   pragma Style_Checks (Off, Little);
-   --  this is not important, just suppress the warning
+   type U_Message_Serial is mod 2 ** 32;
+   for U_Message_Serial'Size use 32;
+   Invalid_Serial : constant U_Message_Serial := 0;
+   subtype Valid_Message_Serial
+   is U_Message_Serial range 1 .. U_Message_Serial'Last;
 
-   type U_Message (Valid : Boolean := False) is record
-      Endianness : Message_Endianness := Default_Message_Endianness;
+   type Message (Serial : U_Message_Serial := Invalid_Serial) is record
       M_Type : Message_Type;
       Flags : Message_Flags;
-
-      --  Padded, depend on byte order
-      Serial : Message_Serial;
       Fields : Field_Maps.Map;
-
-      --  Body, not header proper
       Arguments : D_Bus.Types.Argument_List;
    end record;
    --  Note: this is not the internal representation over the wire
-
-   procedure Read
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : out U_Message);
-   procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : U_Message);
-
-   for U_Message'Read use Read;
-   for U_Message'Write use Write;
 end D_Bus.Messages;

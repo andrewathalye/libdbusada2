@@ -1,6 +1,6 @@
 pragma Ada_2022;
 
-package body D_Bus.Types.Basic is
+package body D_Bus.Types.Basic_Generic is
    --------------------
    -- Basic_Wrappers --
    --------------------
@@ -93,4 +93,4 @@ package body D_Bus.Types.Basic is
          return String (X.I.Element.S);
       end Image;
    end String_Wrappers;
-end D_Bus.Types.Basic;
+end D_Bus.Types.Basic_Generic;

@@ -1,6 +1,6 @@
 pragma Ada_2012;
 
-with D_Bus.Types.Instances; use D_Bus.Types.Instances;
+with D_Bus.Types.Basic; use D_Bus.Types.Basic;
 with D_Bus.Types.Containers; use D_Bus.Types.Containers;
 
 function D_Bus.Types.Dispatching_Read
@@ -128,8 +128,10 @@ begin
             when Dict_CC =>
                declare
                   package L_Dicts is new Dicts
-                    (Key_Signature   =>
-                        Signature (Signature'First + 2 .. Signature'First + 2),
+                    (Key_Type_Code   =>
+                        Signature
+                          (Signature'First + 2 .. Signature'First + 2)
+                          (Signature'First),
                      Value_Signature =>
                         Signature (Signature'First + 3 .. Signature'Last - 1));
                   Temp : L_Dicts.Dict;

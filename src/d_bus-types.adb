@@ -1,5 +1,7 @@
 pragma Ada_2022;
 
+with Ada.Text_IO; use Ada.Text_IO;
+
 with Ada.Containers.Indefinite_Vectors;
 with GNAT.Regexp;
 with GNATCOLL.Strings;
@@ -163,6 +165,12 @@ package body D_Bus.Types is
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean
    is
    begin
+      Ada.Text_IO.Put_Line ("Validate " & String (X));
+      --  A type must not be empty
+      if X'Length = 0 then
+         return False;
+      end if;
+
       --  Basic types can’t be longer than 1
       if X (X'First) in Sig_Solitary and X'Length = 1 then
          return True;
@@ -287,6 +295,17 @@ package body D_Bus.Types is
 
       return Contents_Signature (Buf.To_String);
    end Signature;
+
+   function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count
+   is
+      use type Ada.Streams.Stream_Element_Count;
+      Counter : Ada.Streams.Stream_Element_Count := 0;
+   begin
+      for Element of X loop
+         Counter := Counter + Element.Size;
+      end loop;
+      return Counter;
+   end Size;
 
    ------------------
    -- Padded Types --

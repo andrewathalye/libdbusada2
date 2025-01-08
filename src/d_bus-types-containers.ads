@@ -40,8 +40,6 @@ package D_Bus.Types.Containers is
       --  or calling `Set` manually.
       --  TODO enforce this or we might end up with problems
    private
-      use type Single_Signature;
-
       type Inner_Array is array (Natural range <>) of Root_Type_Holders.Holder;
 
       Types : constant D_Bus.Types.Single_Signature_Array :=
@@ -110,27 +108,41 @@ package D_Bus.Types.Containers is
    --       Arrays         --
    -- (Numeric Containers) --
    --------------------------
-   type Numeric_Container_Cursor (<>) is limited private;
+   type Numeric_Container_Cursor (<>) is private;
+   No_Index : constant Numeric_Container_Cursor;
 
    function Has_Element (C : Numeric_Container_Cursor) return Boolean;
 
-   package Numeric_Container_Iterator is new Ada.Iterator_Interfaces
+   package Numeric_Container_Iterators is new Ada.Iterator_Interfaces
      (Numeric_Container_Cursor, Has_Element);
+   subtype Numeric_Container_Iterator
+   is Numeric_Container_Iterators.Reversible_Iterator;
 
    type Numeric_Container_Type is interface
-      and Numeric_Container_Iterator.Reversible_Iterator
+      and Numeric_Container_Iterator
       and Container_Type
    with
       Constant_Indexing => Constant_Reference_NCT,
-      Variable_Indexing => Reference_NCT;
+      Variable_Indexing => Reference_NCT,
+      Default_Iterator => Iterate_NCT,
+      Iterator_Element => Root_Type'Class;
 
    function Constant_Reference_NCT
      (Container : aliased Numeric_Container_Type;
       Index : Natural) return Constant_Reference_Type is abstract;
 
+   function Constant_Reference_NCT
+     (Container : aliased Numeric_Container_Type;
+     Cursor : Numeric_Container_Cursor) return Constant_Reference_Type
+   is abstract;
+
    function Reference_NCT
      (Container : aliased in out Numeric_Container_Type;
       Index : Natural) return Reference_Type is abstract;
+
+   function Reference_NCT
+     (Container : aliased in out Numeric_Container_Type;
+      Cursor : Numeric_Container_Cursor) return Reference_Type is abstract;
 
    function Has_Element
      (Container : Numeric_Container_Type;
@@ -138,14 +150,14 @@ package D_Bus.Types.Containers is
 
    function Index (C : Numeric_Container_Cursor) return Natural;
    function Element (C : Numeric_Container_Cursor) return Root_Type'Class;
+   function Iterate_NCT (Container : Numeric_Container_Type'Class)
+      return Numeric_Container_Iterator'Class is (Container);
 
    generic
       Inner_Signature : Single_Signature;
    package Arrays is
       type D_Array is new Numeric_Container_Type with private;
    private
-      use type Single_Signature;
-
       package Vectors is new Ada.Containers.Indefinite_Vectors
         (Natural, Root_Type'Class);
 
@@ -202,9 +214,19 @@ package D_Bus.Types.Containers is
          Index : Natural) return Constant_Reference_Type;
 
       overriding
+      function Constant_Reference_NCT
+        (Container : aliased D_Array;
+         C : Numeric_Container_Cursor) return Constant_Reference_Type;
+
+      overriding
       function Reference_NCT
         (Container : aliased in out D_Array;
          Index : Natural) return Reference_Type;
+
+      overriding
+      function Reference_NCT
+        (Container : aliased in out D_Array;
+        C : Numeric_Container_Cursor) return Reference_Type;
 
       overriding
       function Has_Element
@@ -216,32 +238,46 @@ package D_Bus.Types.Containers is
    -- (Keyed Containers) --
    ------------------------
    --  TODO reconsider internal representation. might be faster to use a{KV}
-   type Keyed_Container_Cursor (<>) is limited private;
+   type Keyed_Container_Cursor (<>) is private;
+   No_Key : constant Keyed_Container_Cursor;
 
    function Has_Element (C : Keyed_Container_Cursor) return Boolean;
 
-   package Keyed_Container_Iterator is new Ada.Iterator_Interfaces
+   package Keyed_Container_Iterators is new Ada.Iterator_Interfaces
      (Keyed_Container_Cursor, Has_Element);
+   subtype Keyed_Container_Iterator
+   is Keyed_Container_Iterators.Forward_Iterator;
 
    type Keyed_Container_Type is interface
-      and Keyed_Container_Iterator.Forward_Iterator
+      and Keyed_Container_Iterator
       and Container_Type
    with
       Constant_Indexing => Constant_Reference_KCT,
-      Variable_Indexing => Reference_KCT;
+      Variable_Indexing => Reference_KCT,
+      Default_Iterator => Iterate_KCT,
+      Iterator_Element => Root_Type'Class;
 
    function Constant_Reference_KCT
      (Container : aliased Keyed_Container_Type;
       Key : Basic_Type'Class) return Constant_Reference_Type is abstract;
 
+   function Constant_Reference_KCT
+     (Container : aliased Keyed_Container_Type;
+      Cursor : Keyed_Container_Cursor) return Constant_Reference_Type
+    is abstract;
+
    function Reference_KCT
      (Container : aliased in out Keyed_Container_Type;
       Key : Basic_Type'Class) return Reference_Type is abstract;
 
+   function Reference_KCT
+     (Container : aliased in out Keyed_Container_Type;
+      Cursor : Keyed_Container_Cursor) return Reference_Type is abstract;
+
    procedure Insert
      (Container : in out Keyed_Container_Type;
       Key : Basic_Type'Class;
-      New_Item : Root_Type'Class) is abstract;
+      Value : Root_Type'Class) is abstract;
 
    function Has_Element
      (Container : Keyed_Container_Type;
@@ -249,9 +285,11 @@ package D_Bus.Types.Containers is
 
    function Key (C : Keyed_Container_Cursor) return Basic_Type'Class;
    function Element (C : Keyed_Container_Cursor) return Root_Type'Class;
+   function Iterate_KCT (Container : Keyed_Container_Type'Class)
+      return Keyed_Container_Iterator'Class is (Container);
 
    generic
-      Key_Signature : Single_Signature;
+      Key_Type_Code : Signature_Element;
       Value_Signature : Single_Signature;
    package Dicts is
       type Dict is new Keyed_Container_Type with private;
@@ -283,15 +321,15 @@ package D_Bus.Types.Containers is
       procedure Insert
         (Container : in out Dict;
          Key : Basic_Type'Class;
-         New_Item : Root_Type'Class);
+         Value : Root_Type'Class);
 
       overriding
       function Contents (X : Dict) return Contents_Signature
-      is (Contents_Signature (Key_Signature & Value_Signature));
+      is (Contents_Signature (Key_Type_Code & Value_Signature));
 
       overriding
       function Signature (X : Dict) return Single_Signature
-      is ("a{" & Key_Signature & Single_Signature (X.Contents) & "}");
+      is ("a{" & Key_Type_Code & Single_Signature (X.Contents) & "}");
 
       overriding
       function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
@@ -314,9 +352,19 @@ package D_Bus.Types.Containers is
          Key : Basic_Type'Class) return Constant_Reference_Type;
 
       overriding
+      function Constant_Reference_KCT
+        (Container : aliased Dict;
+         C : Keyed_Container_Cursor) return Constant_Reference_Type;
+
+      overriding
       function Reference_KCT
         (Container : aliased in out Dict;
          Key : Basic_Type'Class) return Reference_Type;
+
+      overriding
+      function Reference_KCT
+        (Container : aliased in out Dict;
+         C : Keyed_Container_Cursor) return Reference_Type;
 
       overriding
       function Has_Element
@@ -339,17 +387,18 @@ private
    ----------------
    -- Containers --
    ----------------
-   No_Index : constant Integer := -1;
-   type Numeric_Container_Cursor is limited record
-      Container : not null access constant Numeric_Container_Type'Class;
+   type Numeric_Container_Cursor is record
+      Container : access constant Numeric_Container_Type'Class;
       Index : Integer;
    end record;
 
-   No_Key : access Basic_Type'Class := null;
-   type Keyed_Container_Cursor is limited record
-      Container : not null access constant Keyed_Container_Type'Class;
+   type Keyed_Container_Cursor is record
+      Container : access constant Keyed_Container_Type'Class;
       Key : access constant Basic_Type'Class;
    end record;
+
+   No_Index : constant Numeric_Container_Cursor := (null, -1);
+   No_Key : constant Keyed_Container_Cursor := (null, null);
 
    type Constant_Reference_Type
      (X : not null access constant Root_Type'Class) is limited null record;

@@ -1,97 +1,70 @@
 pragma Ada_2012;
 
-with Ada.Containers.Indefinite_Holders;
+with Interfaces;
+
+with D_Bus.Types.Basic_Generic; use D_Bus.Types.Basic_Generic;
 
 package D_Bus.Types.Basic is
---  Generic packages for creating basic types
-
    -----------------
    -- Fixed Types --
    -----------------
-   --  Note: `Inner` must not be larger than 64 bits
-   generic
-      Type_Code : Signature_Element;
-      type Inner is private;
-   package Fixed_Wrappers is
-      type Outer is new Basic_Type with private;
+   package Bytes is new Fixed_Wrappers (Byte_CC, Interfaces.Unsigned_8);
+   subtype Byte is Bytes.Outer;
 
-      function "+" (X : Inner) return Outer;
-      function "+" (X : Outer) return Inner;
-   private
-      package Padded_Inners is new Padded_Types (Inner, Inner'Size / 8);
-      type Outer is new Basic_Type with record
-         I : Padded_Inners.Padded_Type;
-      end record;
+   type Boolean_32 is new Boolean
+      with Size => 32;
+   package Booleans is new Fixed_Wrappers (Boolean_CC, Boolean_32);
+   subtype D_Boolean is Booleans.Outer;
+   function "+" (X : D_Boolean) return Boolean is (Boolean (Booleans."+" (X)));
+   function "+" (X : Boolean) return D_Boolean
+      is (Booleans."+" (Boolean_32 (X)));
 
-      overriding
-      function Signature (X : Outer) return Single_Signature
-      is (1 => Type_Code);
+   package Int16s is new Fixed_Wrappers (Int16_CC, Interfaces.Integer_16);
+   subtype Int16 is Int16s.Outer;
+   package Uint16s is new Fixed_Wrappers (Uint16_CC, Interfaces.Unsigned_16);
+   subtype Uint16 is Uint16s.Outer;
 
-      overriding
-      function Size
-        (X : Outer) return Ada.Streams.Stream_Element_Count is (Inner'Size);
+   package Int32s is new Fixed_Wrappers (Int32_CC, Interfaces.Integer_32);
+   subtype Int32 is Int32s.Outer;
+   package Uint32s is new Fixed_Wrappers (Uint32_CC, Interfaces.Unsigned_32);
+   subtype Uint32 is Uint32s.Outer;
 
-      overriding
-      function Image (X : Outer) return String;
-      --  Note: Implemented in body for Ada version compat
-   end Fixed_Wrappers;
+   package Int64s is new Fixed_Wrappers (Int64_CC, Interfaces.Integer_64);
+   subtype Int64 is Int64s.Outer;
+   package Uint64s is new Fixed_Wrappers (Uint64_CC, Interfaces.Unsigned_64);
+   subtype Uint64 is Uint64s.Outer;
+
+   package Doubles is new Fixed_Wrappers (Double_CC, Interfaces.IEEE_Float_64);
+   subtype Double is Doubles.Outer;
+
+   package File_Descriptors is new Fixed_Wrappers
+     (File_Descriptor_CC, Integer);
+   subtype File_Descriptor is File_Descriptors.Outer;
+   --  TODO Needs special help. this is wrong
 
    ------------------
    -- String Types --
    ------------------
-   generic
-      Type_Code : Signature_Element;
-      type Data_Length_Type is mod <>;
-      type External_Type is new String;
-   package String_Wrappers is
-      type Outer is new Basic_Type with private;
+   package Strings is new String_Wrappers
+     (Type_Code => String_CC,
+      Data_Length_Type => Interfaces.Unsigned_32,
+      External_Type => String);
+   subtype D_String is Strings.Outer;
 
-      function "+" (X : Outer) return External_Type;
-      function "+" (X : External_Type) return Outer;
-   private
-      package Padded_Data_Length_Types
-      is new Padded_Types (Data_Length_Type, Data_Length_Type'Size / 8);
+   subtype Object_Path is D_Bus.Types.U_Object_Path;
 
-      type Internal_Raw_String is array
-        (Padded_Data_Length_Types.Padded_Type range <>) of Character;
-      type Internal_Type (L : Padded_Data_Length_Types.Padded_Type) is record
-         S : Internal_Raw_String (1 .. L) := (others => ' ');
-         C : Character := ASCII.NUL;
-      end record;
-      --  TODO check whether calling 'Output and 'Input does what we want
-      Empty_Internal_Type : constant Internal_Type :=
-        (L => 0, S => <>, C => <>);
+   package Object_Paths is new String_Wrappers
+     (Type_Code => Object_Path_CC,
+      Data_Length_Type => Interfaces.Unsigned_32,
+      External_Type => Object_Path);
+   subtype D_Object_Path is Object_Paths.Outer;
+   --  For a lightweight Ada type, use `Object_Path`
 
-      package ITH is new Ada.Containers.Indefinite_Holders (Internal_Type);
-
-      type Outer is new Basic_Type
-      with record
-         I : ITH.Holder := ITH.To_Holder (Empty_Internal_Type);
-      end record;
-
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : out Outer);
-
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : Outer);
-
-      for Outer'Read use Read;
-      for Outer'Write use Write;
-
-      overriding
-      function Signature
-        (X : Outer) return Single_Signature
-      is (1 => Type_Code);
-
-      overriding
-      function Size
-        (X : Outer) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function Image (X : Outer) return String;
-      --  Note: moved to body to avoid a compiler crash due
-      --  to overloaded types
-   end String_Wrappers;
+   package Signatures is new String_Wrappers
+     (Type_Code => Signature_CC,
+      Data_Length_Type => Interfaces.Unsigned_8,
+      External_Type => Contents_Signature);
+   subtype D_Signature is Signatures.Outer;
+   --  For a lightweight Ada type, use `Single_Signature`
+   --  or `Contents_Signature`
 end D_Bus.Types.Basic;
