@@ -13,8 +13,10 @@ package D_Bus.Types.Containers is
    -- Structs --
    -------------
    type Struct (<>) is new Container_Type with private;
-   function Create (Contents : Argument_List) return Struct;
-   --  Return a D-Bus Struct containing `Contents`
+
+   function Empty (Signature : Contents_Signature) return Struct;
+   --  Produce an empty, INVALID Struct with signature `Signature`
+   --  ALL elements must be set before the time can be used.
 
    function Get (Container : Struct; Index : Positive) return Root_Type'Class;
    --  Get element `Index` in `Container`
@@ -56,13 +58,13 @@ package D_Bus.Types.Containers is
    type Array_Cursor (<>) is private;
    No_Index : constant Array_Cursor;
 
-   function Index (C : Array_Cursor) return Positive;
+   function Index (Position : Array_Cursor) return Positive;
    --  Get the index of `C`
 
-   function Element (C : Array_Cursor) return Root_Type'Class;
+   function Element (Position : Array_Cursor) return Root_Type'Class;
    --  Retrieve the element at `C`
 
-   function Has_Element (C : Array_Cursor) return Boolean;
+   function Has_Element (Position : Array_Cursor) return Boolean;
 
    package Array_Iterators is new Ada.Iterator_Interfaces
      (Array_Cursor, Has_Element);
@@ -79,7 +81,7 @@ package D_Bus.Types.Containers is
       return Constant_Reference_Type;
 
    function Constant_Reference_A
-     (Container : aliased D_Array; Cursor : Array_Cursor)
+     (Container : aliased D_Array; Position : Array_Cursor)
       return Constant_Reference_Type;
 
    function Reference_A
@@ -87,7 +89,7 @@ package D_Bus.Types.Containers is
       return Reference_Type;
 
    function Reference_A
-     (Container : aliased in out D_Array; Cursor : Array_Cursor)
+     (Container : aliased in out D_Array; Position : Array_Cursor)
       return Reference_Type;
 
    function Iterate_A (Container : D_Array) return Array_Iterator'Class is
@@ -111,13 +113,13 @@ package D_Bus.Types.Containers is
    ------------------------
    type Dict_Cursor (<>) is private;
    No_Key : constant Dict_Cursor;
-   function Key (C : Dict_Cursor) return Basic_Type'Class;
+   function Key (Position : Dict_Cursor) return Basic_Type'Class;
    --  Return the Key for `C`
 
-   function Element (C : Dict_Cursor) return Root_Type'Class;
+   function Element (Position : Dict_Cursor) return Root_Type'Class;
    --  Return the Element at `C`
 
-   function Has_Element (C : Dict_Cursor) return Boolean;
+   function Has_Element (Position : Dict_Cursor) return Boolean;
 
    package Dict_Iterators is new Ada.Iterator_Interfaces
      (Dict_Cursor, Has_Element);
@@ -137,7 +139,7 @@ package D_Bus.Types.Containers is
       return Constant_Reference_Type;
 
    function Constant_Reference_D
-     (Container : aliased Dict; Cursor : Dict_Cursor)
+     (Container : aliased Dict; Position : Dict_Cursor)
       return Constant_Reference_Type;
 
    function Reference_D
@@ -145,7 +147,7 @@ package D_Bus.Types.Containers is
       return Reference_Type;
 
    function Reference_D
-     (Container : aliased in out Dict; Cursor : Dict_Cursor)
+     (Container : aliased in out Dict; Position : Dict_Cursor)
       return Reference_Type;
 
    function Iterate_D (Container : Dict) return Dict_Iterator'Class is
@@ -220,10 +222,11 @@ private
    ------------
    type Array_Cursor is record
       Container : access constant D_Array;
-      Index     : Integer;
+      Index     : Natural;
+      --  Note: 0 is an INVALID value
    end record;
 
-   No_Index : constant Array_Cursor := (null, -1);
+   No_Index : constant Array_Cursor := (null, 0);
 
    package Vectors is new Ada.Containers.Indefinite_Vectors
      (Natural, Root_Type'Class);
@@ -246,9 +249,9 @@ private
 
    overriding function First (Object : D_Array) return Array_Cursor;
    overriding function Next
-     (Object : D_Array; C : Array_Cursor) return Array_Cursor;
+     (Object : D_Array; Position : Array_Cursor) return Array_Cursor;
    overriding function Previous
-     (Object : D_Array; C : Array_Cursor) return Array_Cursor;
+     (Object : D_Array; Position : Array_Cursor) return Array_Cursor;
    overriding function Last (Object : D_Array) return Array_Cursor;
    -----------
    -- Dicts --
@@ -287,7 +290,7 @@ private
 
    overriding function First (Object : Dict) return Dict_Cursor;
    overriding function Next
-     (Object : Dict; C : Dict_Cursor) return Dict_Cursor;
+     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor;
 
    --------------
    -- Variants --

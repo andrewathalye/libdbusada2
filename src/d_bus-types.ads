@@ -1,13 +1,11 @@
 pragma Ada_2012;
 
 with Ada.Streams;
-with Ada.Characters.Handling;
 with Ada.Containers.Indefinite_Doubly_Linked_Lists;
-
-with GNATCOLL.Strings_Impl;
 
 package D_Bus.Types is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
+   pragma Assertion_Policy (Static_Predicate => Check);
 
    --------------------------
    -- Unchecked Signatures --
@@ -71,14 +69,16 @@ package D_Bus.Types is
    -- Interned Signatures --
    -------------------------
    type Interned_Single_Signature is not null access constant Single_Signature;
+   for Interned_Single_Signature'Storage_Size use 0;
    type Interned_Contents_Signature is
      not null access constant Contents_Signature;
+   for Interned_Contents_Signature'Storage_Size use 0;
+   --  Type signatures are cached during runtime
+   --  These types must only be allocated via `Intern`
 
    function Intern (X : Single_Signature) return Interned_Single_Signature;
-   pragma Pure_Function (Intern);
-
    function Intern (X : Contents_Signature) return Interned_Contents_Signature;
-   pragma Pure_Function (Intern);
+   --  These functions will always return the same value for a signature `X`
 
    type Single_Signature_Array is
      array (Positive range <>) of Interned_Single_Signature;

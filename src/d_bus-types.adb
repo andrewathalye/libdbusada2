@@ -1,17 +1,59 @@
 pragma Ada_2022;
 
 with Ada.Text_IO; use Ada.Text_IO;
-
 with Ada.Containers.Indefinite_Vectors;
-with GNAT.Regexp;
+with System.Storage_Elements;
+with System.Storage_Pools;
 with GNATCOLL.Strings;
 
 with D_Bus.Connection;
 
 package body D_Bus.Types is
    -------------------------
-   -- Signature Interning -- 
+   -- Signature Interning --
    -------------------------
+   --  TODO implement
+   type Interning_Pool is
+   new System.Storage_Pools.Root_Storage_Pool with null record;
+
+   overriding procedure Allocate
+     (Pool : in out Interning_Pool; Storage_Address : out System.Address;
+      Size_In_Storage_Elements :        System.Storage_Elements.Storage_Count;
+      Alignment :        System.Storage_Elements.Storage_Count) is null;
+
+   overriding procedure Deallocate
+     (Pool : in out Interning_Pool; Storage_Address : System.Address;
+      Size_In_Storage_Elements :        System.Storage_Elements.Storage_Count;
+      Alignment :        System.Storage_Elements.Storage_Count) is null;
+
+   overriding function Storage_Size
+     (Pool : Interning_Pool) return System.Storage_Elements.Storage_Count is
+     (0);
+
+   Interning_Pool_Obj : Interning_Pool;
+
+   type Interned_Single_Allocatable is
+     not null access constant Single_Signature;
+   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
+
+   type Interned_Contents_Allocatable is
+     not null access constant Contents_Signature;
+   for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
+
+   function Intern (X : Single_Signature) return Interned_Single_Signature is
+   begin
+      return
+        Interned_Single_Signature
+          (Interned_Single_Allocatable'(new Single_Signature'(X)));
+   end Intern;
+
+   function Intern (X : Contents_Signature) return Interned_Contents_Signature
+   is
+   begin
+      return
+        Interned_Contents_Signature
+          (Interned_Contents_Allocatable'(new Contents_Signature'(X)));
+   end Intern;
 
    ----------------
    -- Signatures --
@@ -131,16 +173,9 @@ package body D_Bus.Types is
       end loop;
 
       --  Produce and return array
-      declare
-         Result :
-           Single_Signature_Array (1 .. Positive (Result_Vector.Length));
-      begin
-         for I in Result'Range loop
-            Result (I) := Intern (Result_Vector (I));
-         end loop;
-
-         return Result;
-      end;
+      --  Note: Ada 2022 syntax was the best I could come up with here
+      --  Otherwise we’d break invariants for not null access
+      return [for SS of Result_Vector => Intern (SS)];
    end U_Split_Signature;
 
    function Split_Signature

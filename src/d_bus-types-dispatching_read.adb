@@ -1,6 +1,6 @@
 pragma Ada_2012;
 
-with D_Bus.Types.Basic; use D_Bus.Types.Basic;
+with D_Bus.Types.Basic;      use D_Bus.Types.Basic;
 with D_Bus.Types.Containers; use D_Bus.Types.Containers;
 
 function D_Bus.Types.Dispatching_Read
@@ -105,50 +105,42 @@ begin
             D_Signature'Read (Stream, Temp);
             return Temp;
          end;
-      --  Container Types
+         --  Container Types
       when Variant_CC =>
-         declare
-            Temp : Variant;
-         begin
+         return Temp : Variant do
             Variant'Read (Stream, Temp);
-            return Temp;
-         end;
+         end return;
       when Struct_Start_CC =>
-         declare
-            package L_Structs is new Structs
-              (Contents_Signature
-                 (Signature (Signature'First + 1 .. Signature'Last - 1)));
-            Temp : L_Structs.Struct;
-         begin
-            L_Structs.Struct'Read (Stream, Temp);
-            return Root_Type'Class (Temp);
-         end;
+         return
+           Temp : Struct :=
+             Empty
+               (Contents_Signature
+                  (Signature (Signature'First + 1 .. Signature'Last - 1)))
+         do
+            Struct'Read (Stream, Temp);
+         end return;
       when Array_CC =>
          case Signature (Signature'First + 1) is
             when Dict_Start_CC =>
-               declare
-                  package L_Dicts is new Dicts
-                    (Key_Type_Code   =>
-                        Signature
-                          (Signature'First + 2 .. Signature'First + 2)
-                          (Signature'First),
-                     Value_Signature =>
-                        Signature (Signature'First + 3 .. Signature'Last - 1));
-                  Temp : L_Dicts.Dict;
-               begin
-                  L_Dicts.Dict'Read (Stream, Temp);
-                  return Root_Type'Class (Temp);
-               end;
+               return
+                 Temp : Dict
+                   (Key_Signature     =>
+                      Signature (Signature'First + 2 .. Signature'First + 2)
+                        (Signature'First),
+                    Element_Signature =>
+                      Intern
+                        (Signature
+                           (Signature'First + 3 .. Signature'Last - 1)))
+               do
+                  Dict'Read (Stream, Temp);
+               end return;
             when others =>
-               declare
-                  package L_Arrays is new Arrays
-                    (Inner_Signature =>
-                        Signature (Signature'First + 1 .. Signature'Last));
-                  Temp : L_Arrays.D_Array;
-               begin
-                  L_Arrays.D_Array'Read (Stream, Temp);
-                  return Root_Type'Class (Temp);
-               end;
+               return
+                 Temp : D_Array
+                   (Intern (Signature (Signature'First + 1 .. Signature'Last)))
+               do
+                  D_Array'Read (Stream, Temp);
+               end return;
          end case;
       when others =>
          raise Constraint_Error;

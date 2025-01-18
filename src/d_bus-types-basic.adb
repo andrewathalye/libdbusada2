@@ -1,3 +1,5 @@
+with GNAT.Regexp;
+
 package body D_Bus.Types.Basic is
    ------------------
    -- Object Paths --

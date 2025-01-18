@@ -13,14 +13,12 @@ procedure Tests is
    Var  : constant D_Bus.Types.Containers.Variant := +Byte;
    Str  : constant D_Bus.Types.Basic.D_String     := +"Hello";
 
-   package Arrs_V is new D_Bus.Types.Containers.Arrays ("v");
-   Arr_V : Arrs_V.D_Array;
+   Arr_V : D_Bus.Types.Containers.D_Array (D_Bus.Types.Intern ("v"));
 
-   package Dicts_sav is new D_Bus.Types.Containers.Dicts ('s', "av");
-   Dict_sav : Dicts_sav.Dict;
+   Dict_sav : D_Bus.Types.Containers.Dict ('s', D_Bus.Types.Intern ("av"));
 
-   package Structs_esav is new D_Bus.Types.Containers.Structs ("a{sav}");
-   Struct_esav : Structs_esav.Struct;
+   Struct_esav : D_Bus.Types.Containers.Struct :=
+     D_Bus.Types.Containers.Empty ("a{sav}");
 begin
    Arr_V.Append (Var);
 
