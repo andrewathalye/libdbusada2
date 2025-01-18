@@ -1,6 +1,5 @@
 pragma Ada_2022;
 
-with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Containers.Indefinite_Vectors;
 with System.Storage_Elements;
 with System.Storage_Pools;
@@ -31,14 +30,15 @@ package body D_Bus.Types is
      (0);
 
    Interning_Pool_Obj : Interning_Pool;
+   pragma Unreferenced (Interning_Pool_Obj);
 
    type Interned_Single_Allocatable is
      not null access constant Single_Signature;
-   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
+--   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
 
    type Interned_Contents_Allocatable is
      not null access constant Contents_Signature;
-   for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
+--  for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
 
    function Intern (X : Single_Signature) return Interned_Single_Signature is
    begin
@@ -75,7 +75,6 @@ package body D_Bus.Types is
         (First : Positive; Last : out Positive) return Single_Signature
       is
       begin
-         Put_Line ("U_SS.RS: " & String (X (First .. X'Last)));
          if X (First) in Basic_Signature_Element or X (First) = Variant_CC then
             Last := First;
             return X_USS (First .. Last);
@@ -164,8 +163,6 @@ package body D_Bus.Types is
       First         : Positive := X'First;
       Last          : Natural  := 0;
    begin
-      Put_Line ("U_SS: " & String (X));
-
       --  Read all single signatures
       while Last < X'Last loop
          Result_Vector.Append (Read_Single_Signature (First, Last));

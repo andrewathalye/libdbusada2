@@ -56,6 +56,12 @@ package D_Bus.Connection is
    function Receive (C : Connected_Connection) return D_Bus.Messages.Message;
    --  Receive a message from connection `C`
 
+   ---------------
+   -- Test Only --
+   ---------------
+   procedure Open_Test_Stream (Stream : out Alignable_Stream);
+   procedure Close_Test_Stream (Stream : out Alignable_Stream);
+
    ----------------
    -- Clientside --
    ----------------

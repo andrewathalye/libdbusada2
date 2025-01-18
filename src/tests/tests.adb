@@ -7,6 +7,8 @@ use type D_Bus.Types.Basic.Byte;
 use type D_Bus.Types.Basic.D_String;
 with D_Bus.Types.Containers;
 use type D_Bus.Types.Containers.Variant;
+--  with D_Bus.Types.Dispatching_Read;
+with D_Bus.Connection;
 
 procedure Tests is
    Byte : constant D_Bus.Types.Basic.Byte         := +1;
@@ -19,6 +21,8 @@ procedure Tests is
 
    Struct_esav : D_Bus.Types.Containers.Struct :=
      D_Bus.Types.Containers.Empty ("a{sav}");
+
+   Stream : aliased D_Bus.Connection.Alignable_Stream;
 begin
    Arr_V.Append (Var);
 
@@ -27,4 +31,10 @@ begin
    Struct_esav.Set (1, Dict_sav);
 
    Put_Line (Struct_esav.Image);
+
+   D_Bus.Connection.Open_Test_Stream (Stream);
+   D_Bus.Types.Containers.Struct'Write (Stream'Access, Struct_esav);
+--   Put_Line (D_Bus.Types.Dispatching_Read (Stream'Access, "(a{sav})").Image);
+   D_Bus.Connection.Close_Test_Stream (Stream);
+
 end Tests;

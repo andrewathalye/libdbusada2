@@ -126,7 +126,7 @@ begin
                  Temp : Dict
                    (Key_Signature     =>
                       Signature (Signature'First + 2 .. Signature'First + 2)
-                        (Signature'First),
+                        (Signature'First + 2),
                     Element_Signature =>
                       Intern
                         (Signature

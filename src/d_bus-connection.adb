@@ -2,6 +2,10 @@ pragma Ada_2012;
 
 with Ada.IO_Exceptions;
 
+with Ada.Strings.Unbounded;
+with Ada.Directories;
+with GNAT.OS_Lib;
+
 package body D_Bus.Connection is
    ---------------
    -- Connected --
@@ -25,7 +29,7 @@ package body D_Bus.Connection is
    -------------
    procedure Reset_Count (Stream : not null access Alignable_Stream) is
    begin
-      Stream.Read_Count := 0;
+      Stream.Read_Count  := 0;
       Stream.Write_Count := 0;
    end Reset_Count;
 
@@ -53,9 +57,7 @@ package body D_Bus.Connection is
       use type Ada.Streams.Stream_Element_Offset;
    begin
       GNAT.Sockets.Receive_Socket
-        (Socket => Stream.Socket,
-         Item => Item,
-         Last => Last);
+        (Socket => Stream.Socket, Item => Item, Last => Last);
 
       Stream.Read_Count := Stream.Read_Count + Last;
    end Read;
@@ -69,9 +71,7 @@ package body D_Bus.Connection is
       Last : Ada.Streams.Stream_Element_Offset;
    begin
       GNAT.Sockets.Send_Socket
-        (Socket => Stream.Socket,
-         Item => Item,
-         Last => Last);
+        (Socket => Stream.Socket, Item => Item, Last => Last);
 
       Stream.Write_Count := Stream.Write_Count + Last;
 
@@ -95,6 +95,37 @@ package body D_Bus.Connection is
          D_Bus.Messages.Message'Read (C.Stream, M);
       end return;
    end Receive;
+
+   ---------------
+   -- Test Only --
+   ---------------
+   procedure Open_Test_Stream (Stream : out Alignable_Stream) is
+      Address :
+        constant GNAT.Sockets.Sock_Addr_Type :=
+          (Family => GNAT.Sockets.Family_Unix,
+           Name => Ada.Strings.Unbounded.To_Unbounded_String ("outsock"));
+
+      Server_Sock : GNAT.Sockets.Socket_Type;
+      Client_Address : GNAT.Sockets.Sock_Addr_Type;
+      Discard : Boolean;
+   begin
+      if Ada.Directories.Exists ("outsock") then
+         GNAT.OS_Lib.Delete_File ("outsock", Discard);
+      end if;
+
+      GNAT.Sockets.Create_Socket
+        (Socket => Server_Sock, Family => GNAT.Sockets.Family_Unix);
+      GNAT.Sockets.Bind_Socket (Server_Sock, Address);
+      GNAT.Sockets.Listen_Socket (Server_Sock);
+      GNAT.Sockets.Accept_Socket
+        (Server_Sock, Stream.Socket, Client_Address);
+   end Open_Test_Stream;
+
+   procedure Close_Test_Stream (Stream : out Alignable_Stream) is
+   begin
+      GNAT.Sockets.Close_Socket (Stream.Socket);
+      Stream.Socket := GNAT.Sockets.No_Socket;
+   end Close_Test_Stream;
 
    pragma Warnings (Off);
    ------------

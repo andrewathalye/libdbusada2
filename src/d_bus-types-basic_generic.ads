@@ -3,7 +3,8 @@ pragma Ada_2012;
 with Ada.Containers.Indefinite_Holders;
 
 package D_Bus.Types.Basic_Generic is
---  Generic packages for creating basic types
+   --  Generic packages for creating basic types
+   --  TODO literal support?
 
    -----------------
    -- Fixed Types --
