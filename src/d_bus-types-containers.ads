@@ -1,430 +1,293 @@
 pragma Ada_2012;
 
-with Ada.Containers.Indefinite_Holders;
-with Ada.Streams;
 with Ada.Iterator_Interfaces;
 
+with Ada.Streams;
+
+private with Ada.Containers.Indefinite_Holders;
 private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Indefinite_Hashed_Maps;
 
 package D_Bus.Types.Containers is
-   ---------------------
-   -- Shared Packages --
-   ---------------------
-   package Root_Type_Holders is new Ada.Containers.Indefinite_Holders
-     (Root_Type'Class);
-
    -------------
    -- Structs --
    -------------
-   type Fixed_Container_Type is interface and Container_Type;
-   function Get
-     (Container : Fixed_Container_Type;
-      Index : Natural) return Root_Type'Class is abstract;
+   type Struct (<>) is new Container_Type with private;
+   function Create (Contents : Argument_List) return Struct;
+   --  Return a D-Bus Struct containing `Contents`
+
+   function Get (Container : Struct; Index : Positive) return Root_Type'Class;
+   --  Get element `Index` in `Container`
+   --  `Index` must be within the bounds of `Container`
 
    procedure Set
-     (Container : out Fixed_Container_Type;
-      Index : Natural;
-      Value : Root_Type'Class) is abstract;
+     (Container : out Struct; Index : Positive; Value : Root_Type'Class);
+   --  Set element `Index` in `Container` to `Value`
+   --  `Index` must be within the bounds of `Container`
+   --  `Value` must be the correct type for `Container`
 
-   function Count
-     (Container : Fixed_Container_Type) return Natural is abstract;
+   function Count (Container : Struct) return Positive;
+   --  Return the number of elements in `Container`
 
-   generic
-      Inner_Signature : Contents_Signature;
-   package Structs is
-      type Struct is new Fixed_Container_Type with private;
-      --  Note: All elements of `Struct` must be assigned
-      --  values before `Struct` can be written or its values
-      --  used. This can be achieved by reading it from a Stream
-      --  or calling `Set` manually.
-      --  TODO enforce this or we might end up with problems
+   overriding function Signature (X : Struct) return Single_Signature;
 
-      overriding
-      function Image (X : Struct) return String;
+   overriding function Size
+     (X : Struct) return Ada.Streams.Stream_Element_Count;
 
-      overriding
-      function Get
-        (Container : Struct;
-         Index : Natural) return Root_Type'Class;
+   overriding function Image (X : Struct) return String;
 
-      overriding
-      procedure Set
-        (Container : out Struct;
-         Index : Natural;
-         Value : Root_Type'Class);
-
-      overriding
-      function Count (Container : Struct) return Natural;
-   private
-      type Inner_Array is array (Natural range <>) of Root_Type_Holders.Holder;
-
-      Types : constant D_Bus.Types.Single_Signature_Array :=
-        D_Bus.Types.Split_Signature (Inner_Signature);
-      --  Shared for all objects of this type
-
-      type Struct is new Fixed_Container_Type with record
-         Inner : Inner_Array (1 .. Types'Length);
-      end record;
-
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : out Struct);
-
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : Struct);
-
-      for Struct'Read use Read;
-      for Struct'Write use Write;
-
-      overriding
-      function Contents (X : Struct) return Contents_Signature
-      is (Inner_Signature);
-
-      overriding
-      function Signature (X : Struct) return Single_Signature
-      is ("(" & Single_Signature (X.Contents) & ")");
-
-      overriding
-      function Size (X : Struct) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function Count (Container : Struct) return Natural
-      is (Container.Inner'Length);
-
-      overriding
-      function Get
-        (Container : Struct;
-         Index : Natural) return Root_Type'Class
-      is (Container.Inner (Index).Element);
-   end Structs;
+   overriding function Contents (X : Struct) return Contents_Signature;
 
    --------------------------------
    -- Iterable Containers Shared --
    --------------------------------
    type Constant_Reference_Type (X : not null access constant Root_Type'Class)
-   is limited private
-   with
-      Implicit_Dereference => X;
+   is
+     limited private with
+     Implicit_Dereference => X;
 
-   type Reference_Type (X : not null access Root_Type'Class)
-   is limited private
-   with Implicit_Dereference => X;
+   type Reference_Type (X : not null access Root_Type'Class) is
+     limited private with
+     Implicit_Dereference => X;
 
-   --------------------------
-   --       Arrays         --
-   -- (Numeric Containers) --
-   --------------------------
-   type Numeric_Container_Cursor (<>) is private;
-   No_Index : constant Numeric_Container_Cursor;
+     --------------------------
+     --       Arrays         --
+     --------------------------
+   type Array_Cursor (<>) is private;
+   No_Index : constant Array_Cursor;
 
-   function Has_Element (C : Numeric_Container_Cursor) return Boolean;
+   function Index (C : Array_Cursor) return Positive;
+   --  Get the index of `C`
 
-   package Numeric_Container_Iterators is new Ada.Iterator_Interfaces
-     (Numeric_Container_Cursor, Has_Element);
-   subtype Numeric_Container_Iterator
-   is Numeric_Container_Iterators.Reversible_Iterator;
+   function Element (C : Array_Cursor) return Root_Type'Class;
+   --  Retrieve the element at `C`
 
-   type Numeric_Container_Type is interface
-      and Numeric_Container_Iterator
-      and Container_Type
-   with
-      Constant_Indexing => Constant_Reference_NCT,
-      Variable_Indexing => Reference_NCT,
-      Default_Iterator => Iterate_NCT,
-      Iterator_Element => Root_Type'Class;
+   function Has_Element (C : Array_Cursor) return Boolean;
 
-   function Constant_Reference_NCT
-     (Container : aliased Numeric_Container_Type;
-      Index : Natural) return Constant_Reference_Type is abstract;
+   package Array_Iterators is new Ada.Iterator_Interfaces
+     (Array_Cursor, Has_Element);
+   subtype Array_Iterator is Array_Iterators.Reversible_Iterator;
 
-   function Constant_Reference_NCT
-     (Container : aliased Numeric_Container_Type;
-     Cursor : Numeric_Container_Cursor) return Constant_Reference_Type
-   is abstract;
+   type D_Array (Element_Signature : Interned_Single_Signature) is
+     new Container_Type and Array_Iterator with private with
+     Constant_Indexing => Constant_Reference_A,
+     Variable_Indexing => Reference_A, Default_Iterator => Iterate_A,
+     Iterator_Element  => Root_Type'Class;
 
-   function Reference_NCT
-     (Container : aliased in out Numeric_Container_Type;
-      Index : Natural) return Reference_Type is abstract;
+   function Constant_Reference_A
+     (Container : aliased D_Array; Index : Positive)
+      return Constant_Reference_Type;
 
-   function Reference_NCT
-     (Container : aliased in out Numeric_Container_Type;
-      Cursor : Numeric_Container_Cursor) return Reference_Type is abstract;
+   function Constant_Reference_A
+     (Container : aliased D_Array; Cursor : Array_Cursor)
+      return Constant_Reference_Type;
 
-   function Has_Element
-     (Container : Numeric_Container_Type;
-      Index : Natural) return Boolean is abstract;
+   function Reference_A
+     (Container : aliased in out D_Array; Index : Positive)
+      return Reference_Type;
 
-   function Index (C : Numeric_Container_Cursor) return Natural;
-   function Element (C : Numeric_Container_Cursor) return Root_Type'Class;
-   function Iterate_NCT (Container : Numeric_Container_Type'Class)
-      return Numeric_Container_Iterator'Class is (Container);
+   function Reference_A
+     (Container : aliased in out D_Array; Cursor : Array_Cursor)
+      return Reference_Type;
 
-   procedure Append
-     (Container : out Numeric_Container_Type;
-      Element : Root_Type'Class) is abstract;
+   function Iterate_A (Container : D_Array) return Array_Iterator'Class is
+     (Container);
 
-   generic
-      Inner_Signature : Single_Signature;
-   package Arrays is
-      type D_Array is new Numeric_Container_Type with private;
+   procedure Append (Container : out D_Array; Element : Root_Type'Class);
+   --  Append `Element` to `Container`
+   --  It must match the `Container`’s signature
 
-      overriding
-      function Image (X : D_Array) return String;
+   overriding function Signature (X : D_Array) return Single_Signature;
 
-      overriding
-      procedure Append
-        (Container : out D_Array;
-         Element : Root_Type'Class);
-   private
-      package Vectors is new Ada.Containers.Indefinite_Vectors
-        (Natural, Root_Type'Class);
+   overriding function Size
+     (X : D_Array) return Ada.Streams.Stream_Element_Count;
 
-      type D_Array is new Numeric_Container_Type with record
-         Inner : Vectors.Vector;
-      end record;
+   overriding function Image (X : D_Array) return String;
 
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : out D_Array);
-
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : D_Array);
-
-      for D_Array'Read use Read;
-      for D_Array'Write use Write;
-
-      overriding
-      function Contents (X : D_Array) return Contents_Signature
-      is (Contents_Signature (Inner_Signature));
-
-      overriding
-      function Signature (X : D_Array) return Single_Signature
-      is ("a" & Single_Signature (X.Contents));
-
-      overriding
-      function Size (X : D_Array) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function First
-        (Object : D_Array) return Numeric_Container_Cursor;
-
-      overriding
-      function Next
-        (Object : D_Array;
-         Position : Numeric_Container_Cursor) return Numeric_Container_Cursor;
-
-      overriding
-      function Last
-        (Object : D_Array) return Numeric_Container_Cursor;
-
-      overriding
-      function Previous
-        (Object : D_Array;
-         Position : Numeric_Container_Cursor) return Numeric_Container_Cursor;
-
-      overriding
-      function Constant_Reference_NCT
-        (Container : aliased D_Array;
-         Index : Natural) return Constant_Reference_Type;
-
-      overriding
-      function Constant_Reference_NCT
-        (Container : aliased D_Array;
-         C : Numeric_Container_Cursor) return Constant_Reference_Type;
-
-      overriding
-      function Reference_NCT
-        (Container : aliased in out D_Array;
-         Index : Natural) return Reference_Type;
-
-      overriding
-      function Reference_NCT
-        (Container : aliased in out D_Array;
-        C : Numeric_Container_Cursor) return Reference_Type;
-
-      overriding
-      function Has_Element
-        (Container : D_Array; Index : Natural) return Boolean;
-   end Arrays;
+   overriding function Contents (X : D_Array) return Contents_Signature;
 
    ------------------------
    --       Dicts        --
-   -- (Keyed Containers) --
    ------------------------
-   --  TODO reconsider internal representation. might be faster to use a{KV}
-   type Keyed_Container_Cursor (<>) is private;
-   No_Key : constant Keyed_Container_Cursor;
+   type Dict_Cursor (<>) is private;
+   No_Key : constant Dict_Cursor;
+   function Key (C : Dict_Cursor) return Basic_Type'Class;
+   --  Return the Key for `C`
 
-   function Has_Element (C : Keyed_Container_Cursor) return Boolean;
+   function Element (C : Dict_Cursor) return Root_Type'Class;
+   --  Return the Element at `C`
 
-   package Keyed_Container_Iterators is new Ada.Iterator_Interfaces
-     (Keyed_Container_Cursor, Has_Element);
-   subtype Keyed_Container_Iterator
-   is Keyed_Container_Iterators.Forward_Iterator;
+   function Has_Element (C : Dict_Cursor) return Boolean;
 
-   type Keyed_Container_Type is interface
-      and Keyed_Container_Iterator
-      and Container_Type
-   with
-      Constant_Indexing => Constant_Reference_KCT,
-      Variable_Indexing => Reference_KCT,
-      Default_Iterator => Iterate_KCT,
-      Iterator_Element => Root_Type'Class;
+   package Dict_Iterators is new Ada.Iterator_Interfaces
+     (Dict_Cursor, Has_Element);
+   subtype Dict_Iterator is Dict_Iterators.Forward_Iterator;
 
-   function Constant_Reference_KCT
-     (Container : aliased Keyed_Container_Type;
-      Key : Basic_Type'Class) return Constant_Reference_Type is abstract;
+   type Dict
+     (Key_Signature     : Basic_Signature_Element;
+      Element_Signature : Interned_Single_Signature)
+   is
+     new Container_Type and Dict_Iterator with private with
+     Constant_Indexing => Constant_Reference_D,
+     Variable_Indexing => Reference_D, Default_Iterator => Iterate_D,
+     Iterator_Element  => Root_Type'Class;
 
-   function Constant_Reference_KCT
-     (Container : aliased Keyed_Container_Type;
-      Cursor : Keyed_Container_Cursor) return Constant_Reference_Type
-    is abstract;
+   function Constant_Reference_D
+     (Container : aliased Dict; Key : Basic_Type'Class)
+      return Constant_Reference_Type;
 
-   function Reference_KCT
-     (Container : aliased in out Keyed_Container_Type;
-      Key : Basic_Type'Class) return Reference_Type is abstract;
+   function Constant_Reference_D
+     (Container : aliased Dict; Cursor : Dict_Cursor)
+      return Constant_Reference_Type;
 
-   function Reference_KCT
-     (Container : aliased in out Keyed_Container_Type;
-      Cursor : Keyed_Container_Cursor) return Reference_Type is abstract;
+   function Reference_D
+     (Container : aliased in out Dict; Key : Basic_Type'Class)
+      return Reference_Type;
+
+   function Reference_D
+     (Container : aliased in out Dict; Cursor : Dict_Cursor)
+      return Reference_Type;
+
+   function Iterate_D (Container : Dict) return Dict_Iterator'Class is
+     (Container);
 
    procedure Insert
-     (Container : in out Keyed_Container_Type;
-      Key : Basic_Type'Class;
-      Value : Root_Type'Class) is abstract;
+     (Container : in out Dict; Key : Basic_Type'Class;
+      Value     :        Root_Type'Class);
+   --  Insert <Key, Value> into `Container`
+   --  Key must match `Container`’s key type
+   --  Value must match `Container`’s element type
 
-   function Has_Element
-     (Container : Keyed_Container_Type;
-      Key : Basic_Type'Class) return Boolean is abstract;
+   overriding function Signature (X : Dict) return Single_Signature;
 
-   function Key (C : Keyed_Container_Cursor) return Basic_Type'Class;
-   function Element (C : Keyed_Container_Cursor) return Root_Type'Class;
-   function Iterate_KCT (Container : Keyed_Container_Type'Class)
-      return Keyed_Container_Iterator'Class is (Container);
+   overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
 
-   generic
-      Key_Type_Code : Signature_Element;
-      Value_Signature : Single_Signature;
-   package Dicts is
-      type Dict is new Keyed_Container_Type with private;
+   overriding function Image (X : Dict) return String;
 
-      overriding
-      procedure Insert
-        (Container : in out Dict;
-         Key : Basic_Type'Class;
-         Value : Root_Type'Class);
-
-      overriding
-      function Image (X : Dict) return String;
-   private
-      function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
-
-      package Hash_Maps is new Ada.Containers.Indefinite_Hashed_Maps
-        (Key_Type        => Basic_Type'Class,
-         Element_Type    => Root_Type'Class,
-         Hash            => Hash,
-         Equivalent_Keys => "=");
-
-      type Dict is new Keyed_Container_Type with record
-         Inner : Hash_Maps.Map;
-      end record;
-
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : out Dict);
-
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : Dict);
-
-      for Dict'Read use Read;
-      for Dict'Write use Write;
-
-      overriding
-      function Contents (X : Dict) return Contents_Signature
-      is (Contents_Signature (Key_Type_Code & Value_Signature));
-
-      overriding
-      function Signature (X : Dict) return Single_Signature
-      is ("a{" & Key_Type_Code & Single_Signature (X.Contents) & "}");
-
-      overriding
-      function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
-
-      overriding
-      function First
-        (Object : Dict) return Keyed_Container_Cursor;
-
-      overriding
-      function Next
-        (Object : Dict;
-         Position : Keyed_Container_Cursor) return Keyed_Container_Cursor;
-
-      overriding
-      function Constant_Reference_KCT
-        (Container : aliased Dict;
-         Key : Basic_Type'Class) return Constant_Reference_Type;
-
-      overriding
-      function Constant_Reference_KCT
-        (Container : aliased Dict;
-         C : Keyed_Container_Cursor) return Constant_Reference_Type;
-
-      overriding
-      function Reference_KCT
-        (Container : aliased in out Dict;
-         Key : Basic_Type'Class) return Reference_Type;
-
-      overriding
-      function Reference_KCT
-        (Container : aliased in out Dict;
-         C : Keyed_Container_Cursor) return Reference_Type;
-
-      overriding
-      function Has_Element
-        (Container : Dict;
-         Key : Basic_Type'Class) return Boolean
-      is (Container.Inner.Contains (Key));
-   end Dicts;
+   overriding function Contents (X : Dict) return Contents_Signature;
 
    --------------
    -- Variants --
    --------------
    type Variant is new Container_Type with private;
-   --  Note: MUST be initialised or it will raise
-   --  `Initialisation_Required`
+   --  Note: MUST be initialised before use or an exception will be raised.
 
    function "+" (X : Root_Type'Class) return Variant;
    function Get (X : Variant) return Root_Type'Class;
    function "+" (X : Variant) return Root_Type'Class renames Get;
 
-   overriding
-   function Image (X : Variant) return String;
+   overriding function Image (X : Variant) return String;
 private
-   ----------------
-   -- Containers --
-   ----------------
-   type Numeric_Container_Cursor is record
-      Container : access constant Numeric_Container_Type'Class;
-      Index : Integer;
+   ------------
+   -- Shared --
+   ------------
+   package Root_Type_Holders is new Ada.Containers.Indefinite_Holders
+     (Root_Type'Class);
+
+   ------------
+   -- Struct --
+   ------------
+   type Root_Type_Holder_Array is
+     array (Positive range <>) of Root_Type_Holders.Holder;
+   type Struct (Count : Positive) is new Container_Type with record
+      Signatures : Single_Signature_Array (1 .. Count);
+      Elements   : Root_Type_Holder_Array (1 .. Count);
    end record;
 
-   type Keyed_Container_Cursor is record
-      Container : access constant Keyed_Container_Type'Class;
-      Key : access constant Basic_Type'Class;
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Struct);
+
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : Struct);
+
+   for Struct'Read use Read;
+   for Struct'Write use Write;
+
+   --------------------------
+   -- Indexable Containers --
+   --------------------------
+   type Constant_Reference_Type (X : not null access constant Root_Type'Class)
+   is
+   limited null record;
+
+   type Reference_Type (X : not null access Root_Type'Class) is
+   limited null record;
+
+   ------------
+   -- Arrays --
+   ------------
+   type Array_Cursor is record
+      Container : access constant D_Array;
+      Index     : Integer;
    end record;
 
-   No_Index : constant Numeric_Container_Cursor := (null, -1);
-   No_Key : constant Keyed_Container_Cursor := (null, null);
+   No_Index : constant Array_Cursor := (null, -1);
 
-   type Constant_Reference_Type
-     (X : not null access constant Root_Type'Class) is limited null record;
+   package Vectors is new Ada.Containers.Indefinite_Vectors
+     (Natural, Root_Type'Class);
 
-   type Reference_Type
-     (X : not null access Root_Type'Class) is limited null record;
+   type D_Array (Element_Signature : Interned_Single_Signature) is
+   new Container_Type and Array_Iterator with record
+      Inner : Vectors.Vector;
+   end record;
+
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out D_Array);
+
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : D_Array);
+
+   for D_Array'Read use Read;
+   for D_Array'Write use Write;
+
+   overriding function First (Object : D_Array) return Array_Cursor;
+   overriding function Next
+     (Object : D_Array; C : Array_Cursor) return Array_Cursor;
+   overriding function Previous
+     (Object : D_Array; C : Array_Cursor) return Array_Cursor;
+   overriding function Last (Object : D_Array) return Array_Cursor;
+   -----------
+   -- Dicts --
+   -----------
+   type Dict_Cursor is record
+      Container : access constant Dict;
+      Key       : access constant Basic_Type'Class;
+   end record;
+
+   No_Key : constant Dict_Cursor := (null, null);
+
+   function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
+
+   package Hash_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type => Basic_Type'Class, Element_Type => Root_Type'Class,
+      Hash     => Hash, Equivalent_Keys => "=");
+
+   type Dict
+     (Key_Signature     : Basic_Signature_Element;
+      Element_Signature : Interned_Single_Signature)
+   is
+   new Container_Type and Dict_Iterator with record
+      Inner : Hash_Maps.Map;
+   end record;
+
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Dict);
+
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : Dict);
+
+   for Dict'Read use Read;
+   for Dict'Write use Write;
+
+   overriding function First (Object : Dict) return Dict_Cursor;
+   overriding function Next
+     (Object : Dict; C : Dict_Cursor) return Dict_Cursor;
 
    --------------
    -- Variants --
@@ -433,24 +296,22 @@ private
       I : Root_Type_Holders.Holder := raise Initialisation_Required;
    end record;
 
-   overriding
-   function Contents (X : Variant) return Contents_Signature
-   is (Contents_Signature (X.I.Element.Signature));
+   overriding function Contents (X : Variant) return Contents_Signature is
+     (Contents_Signature (X.I.Element.Signature));
 
-   overriding
-   function Signature (X : Variant) return Single_Signature
-   is ("v");
+   overriding function Signature (X : Variant) return Single_Signature is
+     ("v");
 
-   overriding
-   function Size (X : Variant) return Ada.Streams.Stream_Element_Count;
+   overriding function Size
+     (X : Variant) return Ada.Streams.Stream_Element_Count;
 
    procedure Read_Variant
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : out Variant);
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Variant);
 
    procedure Write_Variant
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : Variant);
+      Item   : Variant);
 
    for Variant'Read use Read_Variant;
    for Variant'Write use Write_Variant;

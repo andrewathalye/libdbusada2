@@ -1,6 +1,7 @@
 pragma Ada_2012;
 
 with D_Bus.Types.Containers;
+with D_Bus.Types.Basic;
 
 with Ada.Streams;
 private with Ada.Containers.Ordered_Maps;
@@ -93,7 +94,7 @@ package D_Bus.Messages is
 
    function Compose_Call
      (Flags : Message_Flags := Default_Message_Flags;
-      Path  : D_Bus.Types.Object_Path;
+      Path  : D_Bus.Types.Basic.Object_Path;
       M_Interface : Interface_Name := "";
       Member : Member_Name;
       Destination : Bus_Name := "") return Message;
@@ -117,7 +118,7 @@ package D_Bus.Messages is
 
    function Compose_Signal
       (Flags : Message_Flags := Default_Message_Flags;
-       Path : D_Bus.Types.Object_Path;
+       Path : D_Bus.Types.Basic.Object_Path;
        M_Interface : Interface_Name;
        Member : Member_Name) return Message;
    --  Prepare a signal
@@ -136,7 +137,7 @@ package D_Bus.Messages is
    --  Raised when the requested field is not present
    --  TODO currently we’ll get constraint error instead
 
-   function Path (M : Message) return D_Bus.Types.Object_Path;
+   function Path (M : Message) return D_Bus.Types.Basic.Object_Path;
    --  Obligatory in Method_Call and Signal
    --  May raise `Field_Absent`
 

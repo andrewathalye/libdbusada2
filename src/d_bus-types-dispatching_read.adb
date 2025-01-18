@@ -113,7 +113,7 @@ begin
             Variant'Read (Stream, Temp);
             return Temp;
          end;
-      when Struct_CC =>
+      when Struct_Start_CC =>
          declare
             package L_Structs is new Structs
               (Contents_Signature
@@ -125,7 +125,7 @@ begin
          end;
       when Array_CC =>
          case Signature (Signature'First + 1) is
-            when Dict_CC =>
+            when Dict_Start_CC =>
                declare
                   package L_Dicts is new Dicts
                     (Key_Type_Code   =>

@@ -51,7 +51,10 @@ package D_Bus.Types.Basic is
       External_Type => String);
    subtype D_String is Strings.Outer;
 
-   subtype Object_Path is D_Bus.Types.U_Object_Path;
+   type U_Object_Path is new String;
+   function Validate_Object_Path (X : U_Object_Path) return Boolean;
+   subtype Object_Path is U_Object_Path with
+       Dynamic_Predicate => Validate_Object_Path (Object_Path);
 
    package Object_Paths is new String_Wrappers
      (Type_Code => Object_Path_CC,

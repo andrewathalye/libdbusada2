@@ -9,39 +9,13 @@ with GNATCOLL.Strings;
 with D_Bus.Connection;
 
 package body D_Bus.Types is
-   ------------------
-   -- Object Paths --
-   ------------------
-   --  From dbus-binding-generator-ada/share/introspect.xsd
-   Object_Pattern : constant GNAT.Regexp.Regexp := GNAT.Regexp.Compile
-     (Pattern => "^\/?(([a-zA-Z0-9_])+(\/([a-zA-Z0-9_])+)?)+$|^\/$",
-      Glob => True,
-      Case_Sensitive => True);
-
-   -----------
-   -- Valid --
-   -----------
-   function Validate_Object_Path (X : U_Object_Path) return Boolean
-   is
-   begin
-      return GNAT.Regexp.Match (String (X), Object_Pattern);
-   end Validate_Object_Path;
+   -------------------------
+   -- Signature Interning -- 
+   -------------------------
 
    ----------------
    -- Signatures --
    ----------------
-   subtype Sig_Solitary is Character
-   with Static_Predicate =>
-      Sig_Solitary in 'y' | 'b' | 'n' | 'q' | 'i' | 'u' | 'x' | 't' | 'd'
-         | 'h' | 's' | 'o' | 'g' | 'v';
-   --  Types which are only ever one type code long
-
-   subtype Sig_Basic is Character
-   with Static_Predicate =>
-      Sig_Basic in 'y' | 'b' | 'n' | 'q' | 'i' | 'u' | 'x' | 't' | 'd'
-         | 'h' | 's' | 'o' | 'g';
-   --  Only basic D-Bus types
-
    function U_Split_Signature
      (X : U_Contents_Signature) return Single_Signature_Array;
    --  Exactly like the canonical `Split_Signature` but it
@@ -54,35 +28,34 @@ package body D_Bus.Types is
       --  Note: This will often be INVALID
 
       function Read_Single_Signature
-        (First : Positive;
-         Last : out Positive) return Single_Signature;
+        (First : Positive; Last : out Positive) return Single_Signature;
       function Read_Single_Signature
-        (First : Positive;
-         Last : out Positive) return Single_Signature
+        (First : Positive; Last : out Positive) return Single_Signature
       is
       begin
-         Put_Line ("U_SS.RS");
-         if X (First) in Sig_Solitary then
+         Put_Line ("U_SS.RS: " & String (X (First .. X'Last)));
+         if X (First) in Basic_Signature_Element or X (First) = Variant_CC then
             Last := First;
             return X_USS (First .. Last);
          end if;
 
          --  Non-solitary elements
-         for I in X'Range loop
+         for I in First .. X'Last loop
             case X (I) is
                --  Add structs
-               when '(' =>
+               when Struct_Start_CC =>
                   --  Find terminating ')' or fail
                   declare
                      Paren_Count : Natural := 1;
                   begin
                      for J in I + 1 .. X'Last loop
                         case X (J) is
-                           when '(' =>
+                           when Struct_Start_CC =>
                               Paren_Count := Paren_Count + 1;
-                           when ')' =>
+                           when Struct_End_CC =>
                               Paren_Count := Paren_Count - 1;
-                           when others => null;
+                           when others =>
+                              null;
                         end case;
 
                         if Paren_Count = 0 then
@@ -93,8 +66,8 @@ package body D_Bus.Types is
                   end;
                   raise Constraint_Error;
 
-               --  Add arrays and dicts
-               when 'a' =>
+                  --  Add arrays and dicts
+               when Array_CC =>
                   --  Error if remaining length is too short for array
                   if First = X'Last then
                      raise Constraint_Error;
@@ -103,18 +76,19 @@ package body D_Bus.Types is
                   --  Check for dict
                   case X (I + 1) is
                      --  Dict
-                     when '{' =>
+                     when Dict_Start_CC =>
                         --  Find terminating '}' or fail
                         declare
                            Bracket_Count : Natural := 1;
                         begin
                            for J in I + 2 .. X'Last loop
                               case X (J) is
-                                 when '{' =>
+                                 when Dict_Start_CC =>
                                     Bracket_Count := Bracket_Count + 1;
-                                 when '}' =>
+                                 when Dict_End_CC =>
                                     Bracket_Count := Bracket_Count - 1;
-                                 when others => null;
+                                 when others =>
+                                    null;
                               end case;
 
                               if Bracket_Count = 0 then
@@ -125,13 +99,13 @@ package body D_Bus.Types is
                            raise Constraint_Error;
                         end;
 
-                     --  Normal Array, checked via recursive call
+                        --  Normal Array, checked via recursive call
                      when others =>
-                        return "a" & Read_Single_Signature
-                          (First => I + 1,
-                           Last => Last);
+                        return
+                          Array_CC &
+                          Read_Single_Signature (First => I + 1, Last => Last);
                   end case;
-               --  No other valid elements
+                  --  No other valid elements
                when others =>
                   raise Constraint_Error;
             end case;
@@ -145,8 +119,8 @@ package body D_Bus.Types is
 
       --  Variables
       Result_Vector : Single_Signature_Vectors.Vector;
-      First : Positive := X'First;
-      Last : Natural := 0;
+      First         : Positive := X'First;
+      Last          : Natural  := 0;
    begin
       Put_Line ("U_SS: " & String (X));
 
@@ -158,12 +132,11 @@ package body D_Bus.Types is
 
       --  Produce and return array
       declare
-         Result : Single_Signature_Array
-           (1 .. Positive (Result_Vector.Length));
+         Result :
+           Single_Signature_Array (1 .. Positive (Result_Vector.Length));
       begin
          for I in Result'Range loop
-            Result (I) := Unbounded_Single_Signatures.To_XString
-              (Result_Vector (I));
+            Result (I) := Intern (Result_Vector (I));
          end loop;
 
          return Result;
@@ -171,20 +144,24 @@ package body D_Bus.Types is
    end U_Split_Signature;
 
    function Split_Signature
-     (X : Contents_Signature) return Single_Signature_Array
-   is (U_Split_Signature (X));
+     (X : Contents_Signature) return Single_Signature_Array is
+     (U_Split_Signature (X));
 
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean
    is
    begin
-      Ada.Text_IO.Put_Line ("VS: " & String (X));
       --  A type must not be empty
       if X'Length = 0 then
          return False;
       end if;
 
       --  Basic types can’t be longer than 1
-      if X (X'First) in Sig_Solitary and X'Length = 1 then
+      if X (X'First) in Basic_Signature_Element or X (X'First) = Variant_CC
+      then
+         if X'Length > 1 then
+            return False;
+         end if;
+
          return True;
       end if;
 
@@ -195,49 +172,52 @@ package body D_Bus.Types is
 
       --  Full check of complex types
       case X (X'First) is
-         when 'a' =>
+         when Array_CC =>
             --  Minimum length
             if X'Length < 2 then
                return False;
             end if;
 
             --  Check dicts
-            if X (X'First + 1) = '{' then
+            if X (X'First + 1) = Dict_Start_CC then
                --  Must be 4 long and end in '}'
-               if X'Length < 4 and X (X'Last) /= '}' then
+               if X'Length < 4 and X (X'Last) /= Dict_End_CC then
                   return False;
                end if;
 
                --  Key type must be BASIC
-               if X (X'First + 2) not in Sig_Basic then
+               if X (X'First + 2) not in Basic_Signature_Element then
                   return False;
                end if;
 
                --  Recursively check inner signature (only one content)
-               return Validate_Single_Signature
-                  (X (X'First + 3 .. X'Last - 1));
+               return
+                 Validate_Single_Signature (X (X'First + 3 .. X'Last - 1));
             end if;
 
             --  Check arrays via conversion
             declare
-               SSA : constant Single_Signature_Array := U_Split_Signature
-                 (U_Contents_Signature (X (X'First + 1 .. X'Last)));
+               SSA : constant Single_Signature_Array :=
+                 U_Split_Signature
+                   (U_Contents_Signature (X (X'First + 1 .. X'Last)));
                pragma Unreferenced (SSA);
             begin
                null;
             exception
-               when Constraint_Error => return False;
+               when Constraint_Error =>
+                  return False;
             end;
-         when '(' =>
+         when Struct_Start_CC =>
             --  Type must be at least three long and end in ')'
-            if X'Length < 3 or X (X'Last) /= ')' then
+            if X'Length < 3 or X (X'Last) /= Struct_End_CC then
                return False;
             end if;
 
             --  Check contents via conversion
             declare
-               SSA : constant Single_Signature_Array := U_Split_Signature
-                 (U_Contents_Signature (X (X'First + 1 .. X'Last - 1)));
+               SSA : constant Single_Signature_Array :=
+                 U_Split_Signature
+                   (U_Contents_Signature (X (X'First + 1 .. X'Last - 1)));
                pragma Unreferenced (SSA);
             begin
                null;
@@ -256,8 +236,6 @@ package body D_Bus.Types is
      (X : U_Contents_Signature) return Boolean
    is
    begin
-      Ada.Text_IO.Put_Line ("VC: " & String (X));
-
       --  Length check
       if X'Length > 255 then
          return False;
@@ -274,14 +252,14 @@ package body D_Bus.Types is
 
       return True;
    exception
-      when Constraint_Error => return False;
+      when Constraint_Error =>
+         return False;
    end Validate_Contents_Signature;
 
    -------------------------
    -- Root_Type Classwide --
    -------------------------
-   function "=" (L, R : Root_Type'Class) return Boolean
-   is
+   function "=" (L, R : Root_Type'Class) return Boolean is
       use type Ada.Streams.Stream_Element_Count;
    begin
       if L.Signature /= R.Signature then
@@ -298,8 +276,7 @@ package body D_Bus.Types is
    --------------------
    -- Argument Lists --
    --------------------
-   function Signature (X : Argument_List) return Contents_Signature
-   is
+   function Signature (X : Argument_List) return Contents_Signature is
       Buf : GNATCOLL.Strings.XString;
    begin
       for Arg of X loop
@@ -309,8 +286,7 @@ package body D_Bus.Types is
       return Contents_Signature (Buf.To_String);
    end Signature;
 
-   function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count
-   is
+   function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count is
       use type Ada.Streams.Stream_Element_Count;
       Counter : Ada.Streams.Stream_Element_Count := 0;
    begin
@@ -325,10 +301,10 @@ package body D_Bus.Types is
    ------------------
    package body Padded_Types is
       function To_ASA
-         (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
          return D_Bus.Connection.Alignable_Stream_Access;
       function To_ASA
-         (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
          return D_Bus.Connection.Alignable_Stream_Access
       is
       begin
@@ -339,17 +315,17 @@ package body D_Bus.Types is
       -- Read --
       ----------
       procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : out Padded_Type)
+        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+         Item   : out Padded_Type)
       is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-            To_ASA (Stream);
+           To_ASA (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
-            ASA.Read_Count mod Ada.Streams.Stream_Element_Count
-              (Alignment_Bytes);
+           ASA.Read_Count mod
+           Ada.Streams.Stream_Element_Count (Alignment_Bytes);
 
          Discard : Character;
       begin
@@ -367,16 +343,16 @@ package body D_Bus.Types is
       -----------
       procedure Write
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item : Padded_Type)
+         Item   : Padded_Type)
       is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-            To_ASA (Stream);
+           To_ASA (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
-           ASA.Write_Count mod Ada.Streams.Stream_Element_Count
-             (Alignment_Bytes);
+           ASA.Write_Count mod
+           Ada.Streams.Stream_Element_Count (Alignment_Bytes);
       begin
          for I in 1 .. Remainder loop
             Character'Write (Stream, ASCII.NUL);

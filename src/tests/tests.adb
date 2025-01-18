@@ -1,39 +1,32 @@
-pragma Ada_2022;
-pragma Warnings (Off);
+pragma Ada_2012;
 
-with Ada.Text_IO;
-use Ada.Text_IO;
-
-with Ada.Tags;
+with Ada.Text_IO; use Ada.Text_IO;
 
 with D_Bus.Types.Basic;
+use type D_Bus.Types.Basic.Byte;
+use type D_Bus.Types.Basic.D_String;
 with D_Bus.Types.Containers;
+use type D_Bus.Types.Containers.Variant;
 
 procedure Tests is
-   Y : D_Bus.Types.Basic.Byte;
-   package V_Arrays is new D_Bus.Types.Containers.Arrays
-     (Inner_Signature => "v");
-   package I64_ASV_Dicts is new D_Bus.Types.Containers.Dicts (
-      Key_Type_Code => D_Bus.Types.Int64_CC,
-      Value_Signature => "av");
+   Byte : constant D_Bus.Types.Basic.Byte         := +1;
+   Var  : constant D_Bus.Types.Containers.Variant := +Byte;
+   Str  : constant D_Bus.Types.Basic.D_String     := +"Hello";
 
-   use type D_Bus.Types.Containers.Variant;
-   use type D_Bus.Types.Basic.Int64;
-   use type D_Bus.Types.Basic.D_String;
+   package Arrs_V is new D_Bus.Types.Containers.Arrays ("v");
+   Arr_V : Arrs_V.D_Array;
 
+   package Dicts_sav is new D_Bus.Types.Containers.Dicts ('s', "av");
+   Dict_sav : Dicts_sav.Dict;
 
-   Str : D_Bus.Types.Basic.D_String;
-   Var : D_Bus.Types.Containers.Variant := +(+"");
-   Arr : V_Arrays.D_Array;
-
-   Num : D_Bus.Types.Basic.Int64;
-   Dic : I64_ASV_Dicts.Dict;
+   package Structs_esav is new D_Bus.Types.Containers.Structs ("a{sav}");
+   Struct_esav : Structs_esav.Struct;
 begin
-   Str := +"Hello";
-   Var := +Str;
-   Arr.Append (Var);
-   Num := +203;
-   Dic.Insert (Num, Arr);
+   Arr_V.Append (Var);
 
-   Put_Line (Dic.Image);
+   Dict_sav.Insert (Str, Arr_V);
+
+   Struct_esav.Set (1, Dict_sav);
+
+   Put_Line (Struct_esav.Image);
 end Tests;
