@@ -62,8 +62,7 @@ signature =>
 
 array =>
    unsigned 32 byte length (padded)
-   alignment padding
-   sequentially marshalled array elements
+   sequentially marshalled array elements (padded as usual)
    MAXIMUM SIZE 64MB
 
 variant =>

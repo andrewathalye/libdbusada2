@@ -9,16 +9,31 @@ private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Indefinite_Hashed_Maps;
 
 package D_Bus.Types.Containers is
+   pragma Assertion_Policy (Pre => Check);
+
    -------------
    -- Structs --
    -------------
    type Struct (<>) is new Container_Type with private;
+   --  Ada representation of a D_Bus Struct type
+   --  A Struct type has a fixed signature and length.
+   --  Call `Create` to create a Struct with known contents.
+   --  To read in a Struct element-by-element, create an
+   --  empty one using `Empty`.
+
+   function Is_Empty (Container : Struct) return Boolean;
+   --  Returns True if any element of `Container` does not have a value.
 
    function Empty (Signature : Contents_Signature) return Struct;
-   --  Produce an empty, INVALID Struct with signature `Signature`
+   --  Produce an Empty Struct with signature `Signature`
    --  ALL elements must be set before the time can be used.
 
-   function Get (Container : Struct; Index : Positive) return Root_Type'Class;
+   function Create (Arguments : Argument_List) return Struct;
+   --  Return a Struct containing `Arguments`
+
+   function Get
+     (Container : Struct; Index : Positive) return Root_Type'Class with
+     Pre => not Is_Empty (Container);
    --  Get element `Index` in `Container`
    --  `Index` must be within the bounds of `Container`
 
@@ -32,12 +47,8 @@ package D_Bus.Types.Containers is
    --  Return the number of elements in `Container`
 
    overriding function Signature (X : Struct) return Single_Signature;
-
-   overriding function Size
-     (X : Struct) return Ada.Streams.Stream_Element_Count;
-
-   overriding function Image (X : Struct) return String;
-
+   overriding function Image (X : Struct) return String with
+     Pre => not Is_Empty (X);
    overriding function Contents (X : Struct) return Contents_Signature;
 
    --------------------------------
@@ -100,12 +111,7 @@ package D_Bus.Types.Containers is
    --  It must match the `Container`’s signature
 
    overriding function Signature (X : D_Array) return Single_Signature;
-
-   overriding function Size
-     (X : D_Array) return Ada.Streams.Stream_Element_Count;
-
    overriding function Image (X : D_Array) return String;
-
    overriding function Contents (X : D_Array) return Contents_Signature;
 
    ------------------------
@@ -161,11 +167,7 @@ package D_Bus.Types.Containers is
    --  Value must match `Container`’s element type
 
    overriding function Signature (X : Dict) return Single_Signature;
-
-   overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
-
    overriding function Image (X : Dict) return String;
-
    overriding function Contents (X : Dict) return Contents_Signature;
 
    --------------
@@ -178,7 +180,17 @@ package D_Bus.Types.Containers is
    function Get (X : Variant) return Root_Type'Class;
    function "+" (X : Variant) return Root_Type'Class renames Get;
 
+   overriding function Signature (X : Variant) return Single_Signature is
+     ((1 => Variant_CC));
    overriding function Image (X : Variant) return String;
+   overriding function Contents (X : Variant) return Contents_Signature is
+     (Contents_Signature (X.Get.Signature));
+
+   function Input
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+      return Variant;
+   --  Read a Variant from a Stream
+   --  Note: This should not be called directly, use Dispatching_Read instead
 private
    ------------
    -- Shared --
@@ -202,10 +214,15 @@ private
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Struct);
+      Item   : Struct)
+   with
+      Pre => not Is_Empty (Item);
 
    for Struct'Read use Read;
    for Struct'Write use Write;
+
+   overriding function Size
+     (X : Struct) return Ada.Streams.Stream_Element_Count;
 
    --------------------------
    -- Indexable Containers --
@@ -253,6 +270,10 @@ private
    overriding function Previous
      (Object : D_Array; Position : Array_Cursor) return Array_Cursor;
    overriding function Last (Object : D_Array) return Array_Cursor;
+
+   overriding function Size
+     (X : D_Array) return Ada.Streams.Stream_Element_Count;
+
    -----------
    -- Dicts --
    -----------
@@ -292,6 +313,8 @@ private
    overriding function Next
      (Object : Dict; Position : Dict_Cursor) return Dict_Cursor;
 
+   overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
+
    --------------
    -- Variants --
    --------------
@@ -299,23 +322,13 @@ private
       I : Root_Type_Holders.Holder := raise Initialisation_Required;
    end record;
 
-   overriding function Contents (X : Variant) return Contents_Signature is
-     (Contents_Signature (X.I.Element.Signature));
-
-   overriding function Signature (X : Variant) return Single_Signature is
-     ("v");
-
    overriding function Size
      (X : Variant) return Ada.Streams.Stream_Element_Count;
 
-   procedure Read_Variant
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out Variant);
-
-   procedure Write_Variant
+   procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Variant);
 
-   for Variant'Read use Read_Variant;
-   for Variant'Write use Write_Variant;
+   for Variant'Input use Input;
+   for Variant'Write use Write;
 end D_Bus.Types.Containers;

@@ -1,6 +1,7 @@
 pragma Ada_2012;
 
 with Ada.Strings.Hash;
+with Ada.Text_IO; use Ada.Text_IO;
 with GNATCOLL.Strings;
 with Interfaces;
 
@@ -15,30 +16,37 @@ package body D_Bus.Types.Containers is
    package Padded_NRs is new Padded_Types (NR, 8);
    Padded_NR : Padded_NRs.Padded_Type := (null record);
 
-   package Padded_Data_Lengths is new Padded_Types
-        (Interfaces.Unsigned_32, 4);
+   package Padded_Data_Lengths is new Padded_Types (Interfaces.Unsigned_32, 4);
 
    -------------------
    -- Type Checking --
    -------------------
    procedure Type_Check
-     (Expected : Single_Signature;
-      Found : Single_Signature);
+     (Expected : Single_Signature; Found : Single_Signature);
 
-   procedure Type_Check
-     (Expected : Single_Signature;
-      Found : Single_Signature)
+   procedure Type_Check (Expected : Single_Signature; Found : Single_Signature)
    is
    begin
       if Expected /= Found then
-         raise Constraint_Error with "Found " & String (Found)
-         & ". Expected " & String (Expected);
+         raise Constraint_Error
+           with "Found " & String (Found) & ". Expected " & String (Expected);
       end if;
    end Type_Check;
 
    -------------
    -- Structs --
    -------------
+   function Is_Empty (Container : Struct) return Boolean is
+   begin
+      for Holder of Container.Elements loop
+         if Holder.Is_Empty then
+            return True;
+         end if;
+      end loop;
+
+      return False;
+   end Is_Empty;
+
    procedure Read
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Struct)
@@ -50,8 +58,7 @@ package body D_Bus.Types.Containers is
       --  Read all elements
       for I in 1 .. Item.Count loop
          Item.Elements (I).Replace_Element
-           (D_Bus.Types.Dispatching_Read
-             (Stream, Item.Signatures (I).all));
+           (D_Bus.Types.Dispatching_Read (Stream, Item.Signatures (I).all));
       end loop;
    end Read;
 
@@ -69,29 +76,24 @@ package body D_Bus.Types.Containers is
       end loop;
    end Write;
 
-   function Empty
-     (Signature : Contents_Signature) return Struct
-   is
+   function Empty (Signature : Contents_Signature) return Struct is
       Signatures : constant Single_Signature_Array :=
         Split_Signature (Signature);
    begin
-      return Struct'
-               (Count      => Signatures'Length,
-                Signatures => Signatures,
-                Elements   => <>);
+      return
+        Struct'
+          (Count    => Signatures'Length, Signatures => Signatures,
+           Elements => <>);
    end Empty;
 
-   function Get
-     (Container : Struct;
-      Index : Positive) return Root_Type'Class
+   function Get (Container : Struct; Index : Positive) return Root_Type'Class
    is
    begin
       return Container.Elements (Index).Element;
    end Get;
 
    procedure Set
-     (Container : out Struct;
-      Index : Positive; Value : Root_Type'Class)
+     (Container : out Struct; Index : Positive; Value : Root_Type'Class)
    is
    begin
       Type_Check (Container.Signatures (Index).all, Value.Signature);
@@ -148,6 +150,8 @@ package body D_Bus.Types.Containers is
    ------------
    -- Arrays --
    ------------
+   --  TODO we actually need to pad even empty arrays to the element
+   --  boundary
    function Has_Element (Position : Array_Cursor) return Boolean is
       use type Ada.Containers.Count_Type;
    begin
@@ -170,9 +174,9 @@ package body D_Bus.Types.Containers is
    is
       use Ada.Streams;
 
-      Length : Padded_Data_Lengths.Padded_Type;
+      Length        : Padded_Data_Lengths.Padded_Type;
       Stream_Length : Stream_Element_Count;
-      Read_Count : Stream_Element_Count := 0;
+      Read_Count    : Stream_Element_Count := 0;
    begin
       --  Read size
       Padded_Data_Lengths.Padded_Type'Read (Stream, Length);
@@ -182,11 +186,13 @@ package body D_Bus.Types.Containers is
       while Read_Count < Stream_Length loop
          declare
             Temp : constant D_Bus.Types.Root_Type'Class :=
-               D_Bus.Types.Dispatching_Read
-                 (Stream, Item.Element_Signature.all);
+              D_Bus.Types.Dispatching_Read
+                (Stream, Item.Element_Signature.all);
          begin
             Read_Count := Read_Count + Temp.Size;
             Item.Inner.Append (Temp);
+            Put_Line (Stream_Length'Image & " needed for array");
+            Put_Line ("Have " & Read_Count'Image);
          end;
       end loop;
    end Read;
@@ -246,17 +252,15 @@ package body D_Bus.Types.Containers is
       return Buf.To_String;
    end Image;
 
-   overriding function First
-     (Object : D_Array) return Array_Cursor
-   is
+   overriding function First (Object : D_Array) return Array_Cursor is
    begin
-      return (Container => Object'Unrestricted_Access,
-              Index => Object.Inner.First_Index);
+      return
+        (Container => Object'Unrestricted_Access,
+         Index     => Object.Inner.First_Index);
    end First;
 
    overriding function Next
-     (Object : D_Array; Position : Array_Cursor)
-      return Array_Cursor
+     (Object : D_Array; Position : Array_Cursor) return Array_Cursor
    is
    begin
       if Position = No_Index then
@@ -267,21 +271,19 @@ package body D_Bus.Types.Containers is
          return No_Index;
       end if;
 
-      return (Container => Object'Unrestricted_Access,
-              Index => Position.Index + 1);
+      return
+        (Container => Object'Unrestricted_Access, Index => Position.Index + 1);
    end Next;
 
-   overriding function Last
-     (Object : D_Array) return Array_Cursor
-   is
+   overriding function Last (Object : D_Array) return Array_Cursor is
    begin
-      return (Container => Object'Unrestricted_Access,
-              Index => Object.Inner.Last_Index);
+      return
+        (Container => Object'Unrestricted_Access,
+         Index     => Object.Inner.Last_Index);
    end Last;
 
    overriding function Previous
-     (Object : D_Array; Position : Array_Cursor)
-      return Array_Cursor
+     (Object : D_Array; Position : Array_Cursor) return Array_Cursor
    is
    begin
       if Position = No_Index then
@@ -292,55 +294,52 @@ package body D_Bus.Types.Containers is
          return No_Index;
       end if;
 
-      return (Container => Object'Unrestricted_Access,
-             Index => Position.Index - 1);
+      return
+        (Container => Object'Unrestricted_Access, Index => Position.Index - 1);
    end Previous;
 
    function Constant_Reference_A
-     (Container : aliased D_Array;
-      Index : Positive) return Constant_Reference_Type
+     (Container : aliased D_Array; Index : Positive)
+      return Constant_Reference_Type
    is
    begin
-      return (X => Container.Inner.Constant_Reference
-        (Index).Element.all'Unchecked_Access);
+      return
+        (X =>
+           Container.Inner.Constant_Reference (Index).Element.all'
+             Unchecked_Access);
    end Constant_Reference_A;
 
    function Constant_Reference_A
-     (Container : aliased D_Array;
-      Position : Array_Cursor) return Constant_Reference_Type
-   is (Constant_Reference_A (Position.Container.all, Position.Index));
+     (Container : aliased D_Array; Position : Array_Cursor)
+      return Constant_Reference_Type is
+     (Constant_Reference_A (Position.Container.all, Position.Index));
 
    function Reference_A
-     (Container : aliased in out D_Array;
-      Index : Positive) return Reference_Type
+     (Container : aliased in out D_Array; Index : Positive)
+      return Reference_Type
    is
    begin
-      return (X => Container.Inner.Reference
-        (Index).Element.all'Unchecked_Access);
+      return
+        (X => Container.Inner.Reference (Index).Element.all'Unchecked_Access);
    end Reference_A;
 
    function Reference_A
-     (Container : aliased in out D_Array;
-      Position : Array_Cursor) return Reference_Type
-   is (Reference_A (Container, Position.Index));
+     (Container : aliased in out D_Array; Position : Array_Cursor)
+      return Reference_Type is
+     (Reference_A (Container, Position.Index));
 
-   procedure Append
-     (Container : out D_Array;
-      Element : Root_Type'Class)
-   is
+   procedure Append (Container : out D_Array; Element : Root_Type'Class) is
    begin
       Type_Check (Container.Element_Signature.all, Element.Signature);
       Container.Inner.Append (Element);
    end Append;
 
-   overriding
-   function Contents (X : D_Array) return Contents_Signature is
+   overriding function Contents (X : D_Array) return Contents_Signature is
    begin
       return Contents_Signature (X.Element_Signature.all);
    end Contents;
 
-   overriding
-   function Signature (X : D_Array) return Single_Signature is
+   overriding function Signature (X : D_Array) return Single_Signature is
    begin
       return Array_CC & X.Element_Signature.all;
    end Signature;
@@ -379,33 +378,41 @@ package body D_Bus.Types.Containers is
    is
       use Ada.Streams;
       Stream_Length : Stream_Element_Count;
-      Stream_Index : Stream_Element_Count := 0;
+      Stream_Index  : Stream_Element_Count := 0;
    begin
       --  Read length
       Padded_Data_Lengths.Padded_Type'Read
         (Stream, Padded_Data_Lengths.Padded_Type (Stream_Length));
 
+      --  Mandatory padding even for empty dict
+      Padded_NRs.Padded_Type'Read (Stream, Padded_NR);
 
-      --  Add keys and values
+      --  Read keys and values
       while Stream_Index < Stream_Length loop
+         --  Dict_Entry padding
+         Padded_NRs.Padded_Type'Read (Stream, Padded_NR);
+         --  TODO
+
          declare
-            Key : constant Basic_Type'Class :=
+            Key   : constant Basic_Type'Class :=
               Basic_Type'Class
                 (D_Bus.Types.Dispatching_Read
-                  (Stream, (1 => Item.Key_Signature)));
-            Value : constant Root_Type'Class :=
+                   (Stream, (1 => Item.Key_Signature)));
+            Value : constant Root_Type'Class  :=
               D_Bus.Types.Dispatching_Read
                 (Stream, Item.Element_Signature.all);
          begin
             Item.Inner.Insert (Key, Value);
             Stream_Index := Stream_Index + Key.Size + Value.Size;
+
+            Put_Line (Stream_Length'Image & " needed for dict");
+            Put_Line ("Have " & Stream_Index'Image);
          end;
       end loop;
    end Read;
 
    procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Dict)
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class; Item : Dict)
    is
       use Ada.Streams;
       Stream_Length : Stream_Element_Count := 0;
@@ -413,14 +420,13 @@ package body D_Bus.Types.Containers is
       --  Calculate Length
       --  Note: We don’t use .Size because that includes the Length itself
       for C in Item.Inner.Iterate loop
-         Stream_Length := Stream_Length + Hash_Maps.Key (C).Size
-            + Hash_Maps.Element (C).Size;
+         Stream_Length :=
+           Stream_Length + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
       end loop;
 
       --  Write Length
       Padded_Data_Lengths.Padded_Type'Write
-        (Stream,
-         Padded_Data_Lengths.Padded_Type (Item.Size));
+        (Stream, Padded_Data_Lengths.Padded_Type (Item.Size));
 
       --  Write Key - Value pairs
       for C in Item.Inner.Iterate loop
@@ -431,8 +437,7 @@ package body D_Bus.Types.Containers is
    end Write;
 
    procedure Insert
-     (Container : in out Dict; Key : Basic_Type'Class;
-      Value  :        Root_Type'Class)
+     (Container : in out Dict; Key : Basic_Type'Class; Value : Root_Type'Class)
    is
    begin
       Type_Check ((1 => Container.Key_Signature), Key.Signature);
@@ -440,16 +445,15 @@ package body D_Bus.Types.Containers is
       Container.Inner.Insert (Key, Value);
    end Insert;
 
-   overriding function Size
-     (X : Dict) return Ada.Streams.Stream_Element_Count
+   overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count
    is
       use Ada.Streams;
       Counter : Stream_Element_Count :=
-         Padded_Data_Lengths.Padded_Type'Size / 8;
+        Padded_Data_Lengths.Padded_Type'Size / 8;
    begin
       for C in X.Inner.Iterate loop
-         Counter := Counter + Hash_Maps.Key (C).Size
-            + Hash_Maps.Element (C).Size;
+         Counter :=
+           Counter + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
       end loop;
 
       return Counter;
@@ -469,8 +473,7 @@ package body D_Bus.Types.Containers is
       return Buf.To_String;
    end Image;
 
-   overriding function First (Object : Dict) return Dict_Cursor
-   is
+   overriding function First (Object : Dict) return Dict_Cursor is
       use type Hash_Maps.Cursor;
       FEC : constant Hash_Maps.Cursor := Object.Inner.First;
       --  First Element Cursor
@@ -479,14 +482,14 @@ package body D_Bus.Types.Containers is
          return No_Key;
       end if;
 
-      return (Container => Object'Unchecked_Access,
-              Key => Hash_Maps.Key (FEC)'Unrestricted_Access);
+      return
+        (Container => Object'Unchecked_Access,
+         Key       => Hash_Maps.Key (FEC)'Unrestricted_Access);
       --  Note: UNRESTRICTED because ALIASED not given
    end First;
 
    overriding function Next
-     (Object : Dict; Position : Dict_Cursor)
-      return Dict_Cursor
+     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor
    is
       use type Hash_Maps.Cursor;
 
@@ -497,13 +500,13 @@ package body D_Bus.Types.Containers is
          raise Constraint_Error;
       end if;
 
-      NPC := Hash_Maps.Next
-        (Object.Inner.Find (Position.Key.all));
+      NPC := Hash_Maps.Next (Object.Inner.Find (Position.Key.all));
       if NPC = Hash_Maps.No_Element then
          return No_Key;
       else
-         return (Container => Object'Unchecked_Access,
-                 Key => Hash_Maps.Key (NPC)'Unrestricted_Access);
+         return
+           (Container => Object'Unchecked_Access,
+            Key       => Hash_Maps.Key (NPC)'Unrestricted_Access);
          --  Note: unrestricted because `aliased` not given
       end if;
    end Next;
@@ -513,43 +516,43 @@ package body D_Bus.Types.Containers is
       return Constant_Reference_Type
    is
    begin
-      return (X =>
-         Hash_Maps.Constant_Reference
-           (Container.Inner, Key).Element.all'Unchecked_Access);
+      return
+        (X =>
+           Hash_Maps.Constant_Reference (Container.Inner, Key).Element.all'
+             Unchecked_Access);
    end Constant_Reference_D;
 
    function Constant_Reference_D
      (Container : aliased Dict; Position : Dict_Cursor)
-      return Constant_Reference_Type
-   is (Constant_Reference_D (Position.Container.all, Position.Key.all));
+      return Constant_Reference_Type is
+     (Constant_Reference_D (Position.Container.all, Position.Key.all));
 
    function Reference_D
-     (Container : aliased in out Dict;
-      Key : Basic_Type'Class) return Reference_Type
+     (Container : aliased in out Dict; Key : Basic_Type'Class)
+      return Reference_Type
    is
    begin
-      return (X =>
-         Hash_Maps.Reference
-           (Container.Inner, Key).Element.all'Unchecked_Access);
+      return
+        (X =>
+           Hash_Maps.Reference (Container.Inner, Key).Element.all'
+             Unchecked_Access);
    end Reference_D;
 
    function Reference_D
      (Container : aliased in out Dict; Position : Dict_Cursor)
-      return Reference_Type
-   is (Reference_D (Container, Position.Key.all));
+      return Reference_Type is
+     (Reference_D (Container, Position.Key.all));
 
-   overriding
-   function Contents (X : Dict) return Contents_Signature is
+   overriding function Contents (X : Dict) return Contents_Signature is
    begin
-      return Contents_Signature
-        (X.Key_Signature & X.Element_Signature.all);
+      return Contents_Signature (X.Key_Signature & X.Element_Signature.all);
    end Contents;
 
-   overriding
-   function Signature (X : Dict) return Single_Signature is
+   overriding function Signature (X : Dict) return Single_Signature is
    begin
-      return Array_CC & Dict_Start_CC & X.Key_Signature
-         & X.Element_Signature.all & Dict_End_CC;
+      return
+        Array_CC & Dict_Start_CC & X.Key_Signature & X.Element_Signature.all &
+        Dict_End_CC;
    end Signature;
 
    --------------
@@ -586,7 +589,9 @@ package body D_Bus.Types.Containers is
    begin
       --  Note: Cast is to help the compiler out
       --  There’s a lot of overloading here
-      return Basic_Type'Class (Variant_Signature (X)).Size + X.I.Element.Size;
+      return
+        D_Bus.Types.Basic.D_Signature'(Variant_Signature (X)).Size +
+        X.I.Element.Size;
    end Size;
 
    overriding function Image (X : Variant) return String is
@@ -594,9 +599,9 @@ package body D_Bus.Types.Containers is
       return "{" & X.I.Element.Image & "}";
    end Image;
 
-   procedure Read_Variant
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out Variant)
+   function Input
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+      return Variant
    is
       use type D_Bus.Types.Basic.D_Signature;
 
@@ -605,28 +610,30 @@ package body D_Bus.Types.Containers is
       --  Read signature
       D_Bus.Types.Basic.D_Signature'Read (Stream, VS);
 
+      Put_Line ("Variant signature: " & VS.Image);
+
       --  Read element
       declare
          Element : constant Root_Type'Class :=
-            D_Bus.Types.Dispatching_Read
-              (Stream,
-               Single_Signature (Contents_Signature'(+VS)));
+           D_Bus.Types.Dispatching_Read
+             (Stream, Single_Signature (Contents_Signature'(+VS)));
       begin
-         Item.I.Replace_Element (Element);
+         return Result : Variant := (I => Root_Type_Holders.Empty_Holder) do
+            Result.I.Replace_Element (Element);
+         end return;
       end;
-   end Read_Variant;
+   end Input;
 
-   procedure Write_Variant
+   procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Variant)
    is
    begin
       --  Write signature
-      D_Bus.Types.Basic.D_Signature'Write
-        (Stream, Variant_Signature (Item));
+      D_Bus.Types.Basic.D_Signature'Write (Stream, Variant_Signature (Item));
 
       --  Write element
       Root_Type'Class'Write (Stream, Item.I.Element);
-   end Write_Variant;
+   end Write;
 
 end D_Bus.Types.Containers;

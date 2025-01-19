@@ -2,14 +2,16 @@
 
 nix-ada.pkgs.mkShell {
    nativeBuildInputs = [
-      nix-ada.gprbuild  
-      nix-ada.gnat
+      nix-ada.pkgs.gprbuild  
+      nix-ada.pkgs.gnat
       nix-ada.libadalang-tools
       nix-ada.ada-language-server
       nix-ada.pkgs.nodejs
 
       # Debugging and tests
       nix-ada.pkgs.gdb
+      nix-ada.pkgs.socat
+#      nix-ada.pkgs.gnatprove
 #      nix-ada.pkgs.lcov
 #      nix-ada.pkgs.valgrind
 #      nix-ada.pkgs.rr

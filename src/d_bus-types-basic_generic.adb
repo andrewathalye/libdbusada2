@@ -82,7 +82,7 @@ package body D_Bus.Types.Basic_Generic is
          Item   : Outer)
       is
       begin
-         Internal_Type'Write (Stream, Item.I.Element);
+         Internal_Type'Output (Stream, Item.I.Element);
       end Write;
 
       -----------

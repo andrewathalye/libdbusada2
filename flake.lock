@@ -5,11 +5,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1737123334,
-        "narHash": "sha256-JqdGD3QEYnmh0Vuj/mbJBIfm/S4bUnzwF5V/VBxsOEo=",
+        "lastModified": 1737282082,
+        "narHash": "sha256-XCpD72YHErwHSk4utcYJwKqvllbyl5JrN9q4bM573Yg=",
         "ref": "refs/heads/master",
-        "rev": "9f006ee89c2d9c0640669cfd3603cb20c83bae75",
-        "revCount": 41,
+        "rev": "c883e52bdd01cb710bc77b958fa7cc5e3c3f00e5",
+        "revCount": 42,
         "type": "git",
         "url": "file:///home/andrew/src/ada/nix-ada"
       },

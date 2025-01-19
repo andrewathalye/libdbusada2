@@ -8,6 +8,6 @@
    in
    with nix-ada_s;
    {
-      devShells.x86_64-linux.default = import nix/shell.nix { nix-ada = nix-ada_s; };
+      devShells.x86_64-linux.default = import ./shell.nix { nix-ada = nix-ada_s; };
    };
 }
