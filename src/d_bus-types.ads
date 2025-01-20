@@ -80,6 +80,9 @@ package D_Bus.Types is
    function Intern (X : Contents_Signature) return Interned_Contents_Signature;
    --  These functions will always return the same value for a signature `X`
 
+   --------------------------
+   -- Arrays of Signatures --
+   --------------------------
    type Single_Signature_Array is
      array (Positive range <>) of Interned_Single_Signature;
 
@@ -148,7 +151,9 @@ package D_Bus.Types is
       for Padded_Type'Write use Write;
    end Padded_Types;
 private
-   --  Constant Completion
+   -------------------------
+   -- Constant Completion --
+   -------------------------
    Byte_CC            : constant Signature_Element := 'y';
    Boolean_CC         : constant Signature_Element := 'b';
    Int16_CC           : constant Signature_Element := 'n';

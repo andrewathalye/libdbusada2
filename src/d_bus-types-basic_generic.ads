@@ -1,10 +1,10 @@
 pragma Ada_2012;
 
 with Ada.Containers.Indefinite_Holders;
+with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 
 package D_Bus.Types.Basic_Generic is
    --  Generic packages for creating basic types
-   --  TODO literal support?
 
    -----------------
    -- Fixed Types --
@@ -35,6 +35,51 @@ package D_Bus.Types.Basic_Generic is
         (Inner'Size / 8);
    end Fixed_Wrappers;
 
+   generic
+      Type_Code : Signature_Element;
+      type Inner is (<>);
+   package Discrete_Wrappers is
+      type Outer is new Basic_Type with private with
+        Integer_Literal => Value, String_Literal => Value;
+
+      function "+" (X : Inner) return Outer;
+      function "+" (X : Outer) return Inner;
+
+      function Value (X : String) return Outer is (+Inner'Value (X));
+      function Value (X : Wide_Wide_String) return Outer is
+        (+Inner'Wide_Wide_Value (X));
+   private
+      package Fixed_Types is new Fixed_Wrappers (Type_Code, Inner);
+      type Outer is new Fixed_Types.Outer with null record;
+
+      use type Fixed_Types.Outer;
+      function "+" (X : Inner) return Outer is
+        (Fixed_Types.Outer'(+X) with null record);
+      function "+" (X : Outer) return Inner is (+Fixed_Types.Outer (X));
+
+   end Discrete_Wrappers;
+
+   generic
+      Type_Code : Signature_Element;
+      type Inner is digits <>;
+   package Real_Wrappers is
+      type Outer is new Basic_Type with private with
+        Real_Literal => Value;
+
+      function "+" (X : Inner) return Outer;
+      function "+" (X : Outer) return Inner;
+
+      function Value (X : String) return Outer is (+Inner'Value (X));
+   private
+      package Fixed_Types is new Fixed_Wrappers (Type_Code, Inner);
+      type Outer is new Fixed_Types.Outer with null record;
+
+      use type Fixed_Types.Outer;
+      function "+" (X : Inner) return Outer is
+        (Fixed_Types.Outer'(+X) with null record);
+      function "+" (X : Outer) return Inner is (+Fixed_Types.Outer (X));
+   end Real_Wrappers;
+
    ------------------
    -- String Types --
    ------------------
@@ -43,12 +88,17 @@ package D_Bus.Types.Basic_Generic is
       type Data_Length_Type is mod <>;
       type External_Type is new String;
    package String_Wrappers is
-      type Outer is new Basic_Type with private;
+      type Outer is new Basic_Type with private with
+        String_Literal => Value;
 
       function "+" (X : Outer) return External_Type;
       function "+" (X : External_Type) return Outer;
 
       overriding function Image (X : Outer) return String;
+      function Value (X : Wide_Wide_String) return Outer is
+        (+External_Type
+           (Ada.Strings.UTF_Encoding.UTF_8_String'
+              (Ada.Strings.UTF_Encoding.Wide_Wide_Strings.Encode (X))));
    private
       package Padded_Data_Length_Types is new Padded_Types
         (Data_Length_Type, Data_Length_Type'Size / 8);

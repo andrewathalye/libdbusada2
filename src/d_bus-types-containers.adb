@@ -36,6 +36,23 @@ package body D_Bus.Types.Containers is
    -------------
    -- Structs --
    -------------
+   function "+" (Arguments : Argument_List) return Struct is
+      I : Positive := 1;
+   begin
+      if Arguments.Is_Empty then
+         raise Constraint_Error with "A Struct may not be empty";
+      end if;
+
+      return Result : Struct (Positive (Arguments.Length)) do
+         for Argument of Arguments loop
+            Result.Signatures (I) := Intern (Argument.Signature);
+            Result.Elements (I).Replace_Element (Argument);
+
+            I := I + 1;
+         end loop;
+      end return;
+   end "+";
+
    function Is_Empty (Container : Struct) return Boolean is
    begin
       for Holder of Container.Elements loop
@@ -328,7 +345,7 @@ package body D_Bus.Types.Containers is
       return Reference_Type is
      (Reference_A (Container, Position.Index));
 
-   procedure Append (Container : out D_Array; Element : Root_Type'Class) is
+   procedure Append (Container : in out D_Array; Element : Root_Type'Class) is
    begin
       Type_Check (Container.Element_Signature.all, Element.Signature);
       Container.Inner.Append (Element);
@@ -558,20 +575,6 @@ package body D_Bus.Types.Containers is
    --------------
    -- Variants --
    --------------
-   -----------------------
-   -- Variant_Signature --
-   --      (private)    --
-   -----------------------
-   function Variant_Signature
-     (X : Variant) return D_Bus.Types.Basic.D_Signature;
-   function Variant_Signature
-     (X : Variant) return D_Bus.Types.Basic.D_Signature
-   is
-      use type D_Bus.Types.Basic.D_Signature;
-   begin
-      return +X.Contents;
-   end Variant_Signature;
-
    function "+" (X : Root_Type'Class) return Variant is
    begin
       return (I => Root_Type_Holders.To_Holder (X));
@@ -586,22 +589,25 @@ package body D_Bus.Types.Containers is
      (X : Variant) return Ada.Streams.Stream_Element_Count
    is
       use type Ada.Streams.Stream_Element_Count;
+      use type D_Bus.Types.Basic.D_Signature;
    begin
-      --  Note: Cast is to help the compiler out
-      --  There’s a lot of overloading here
+      --  Type specification is to help out the compiler.
       return
-        D_Bus.Types.Basic.D_Signature'(Variant_Signature (X)).Size +
-        X.I.Element.Size;
+        D_Bus.Types.Basic.D_Signature'(+X.Contents).Size + X.I.Element.Size;
    end Size;
+
+   Variant_Signature : constant Single_Signature := (1 => Variant_CC);
+   overriding function Signature (X : Variant) return Single_Signature is
+     (Variant_Signature);
 
    overriding function Image (X : Variant) return String is
    begin
       return "{" & X.I.Element.Image & "}";
    end Image;
 
-   function Input
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-      return Variant
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Variant)
    is
       use type D_Bus.Types.Basic.D_Signature;
 
@@ -618,19 +624,18 @@ package body D_Bus.Types.Containers is
            D_Bus.Types.Dispatching_Read
              (Stream, Single_Signature (Contents_Signature'(+VS)));
       begin
-         return Result : Variant := (I => Root_Type_Holders.Empty_Holder) do
-            Result.I.Replace_Element (Element);
-         end return;
+         Item.I.Replace_Element (Element);
       end;
-   end Input;
+   end Read;
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Variant)
    is
+      use type D_Bus.Types.Basic.D_Signature;
    begin
       --  Write signature
-      D_Bus.Types.Basic.D_Signature'Write (Stream, Variant_Signature (Item));
+      D_Bus.Types.Basic.D_Signature'Write (Stream, +Item.Contents);
 
       --  Write element
       Root_Type'Class'Write (Stream, Item.I.Element);

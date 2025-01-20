@@ -14,22 +14,22 @@ package D_Bus.Types.Containers is
    -------------
    -- Structs --
    -------------
-   type Struct (<>) is new Container_Type with private;
+   type Struct (Count : Positive) is new Container_Type with private;
    --  Ada representation of a D_Bus Struct type
-   --  A Struct type has a fixed signature and length.
-   --  Call `Create` to create a Struct with known contents.
-   --  To read in a Struct element-by-element, create an
-   --  empty one using `Empty`.
+   --  A Struct type has a fixed signature and length, and may not be empty.
+   --
+   --  Create a Struct using "+" and a list of arguments
+   --  or create an empty struct using `Empty` and call `Set`
 
    function Is_Empty (Container : Struct) return Boolean;
    --  Returns True if any element of `Container` does not have a value.
 
+   function "+" (Arguments : Argument_List) return Struct;
+   --  Return a Struct containing `Arguments`
+
    function Empty (Signature : Contents_Signature) return Struct;
    --  Produce an Empty Struct with signature `Signature`
-   --  ALL elements must be set before the time can be used.
-
-   function Create (Arguments : Argument_List) return Struct;
-   --  Return a Struct containing `Arguments`
+   --  All elements must be set before the type can be used.
 
    function Get
      (Container : Struct; Index : Positive) return Root_Type'Class with
@@ -63,9 +63,10 @@ package D_Bus.Types.Containers is
      limited private with
      Implicit_Dereference => X;
 
-     --------------------------
-     --       Arrays         --
-     --------------------------
+     ------------
+     -- Arrays --
+     ------------
+     --  Note: no Aggregate because of discriminant
    type Array_Cursor (<>) is private;
    No_Index : constant Array_Cursor;
 
@@ -106,7 +107,7 @@ package D_Bus.Types.Containers is
    function Iterate_A (Container : D_Array) return Array_Iterator'Class is
      (Container);
 
-   procedure Append (Container : out D_Array; Element : Root_Type'Class);
+   procedure Append (Container : in out D_Array; Element : Root_Type'Class);
    --  Append `Element` to `Container`
    --  It must match the `Container`’s signature
 
@@ -117,6 +118,7 @@ package D_Bus.Types.Containers is
    ------------------------
    --       Dicts        --
    ------------------------
+   --  Note: no Aggregate because of discriminant
    type Dict_Cursor (<>) is private;
    No_Key : constant Dict_Cursor;
    function Key (Position : Dict_Cursor) return Basic_Type'Class;
@@ -174,23 +176,24 @@ package D_Bus.Types.Containers is
    -- Variants --
    --------------
    type Variant is new Container_Type with private;
-   --  Note: MUST be initialised before use or an exception will be raised.
+   --  Note: Must be assigned before using its value.
 
    function "+" (X : Root_Type'Class) return Variant;
-   function Get (X : Variant) return Root_Type'Class;
+   function Get (X : Variant) return Root_Type'Class with
+     Pre => not Is_Empty (X);
    function "+" (X : Variant) return Root_Type'Class renames Get;
 
-   overriding function Signature (X : Variant) return Single_Signature is
-     ((1 => Variant_CC));
-   overriding function Image (X : Variant) return String;
-   overriding function Contents (X : Variant) return Contents_Signature is
-     (Contents_Signature (X.Get.Signature));
+   function Is_Empty (Container : Variant) return Boolean;
+   --  Checks whether the Variant contains a value.
+   --  According to the specification, a Variant may not be empty.
 
-   function Input
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-      return Variant;
-   --  Read a Variant from a Stream
-   --  Note: This should not be called directly, use Dispatching_Read instead
+   overriding function Signature (X : Variant) return Single_Signature;
+   overriding function Image (X : Variant) return String with
+     Pre => not Is_Empty (X);
+   overriding function Contents (X : Variant) return Contents_Signature is
+     (Contents_Signature (X.Get.Signature)) with
+     Pre => not Is_Empty (X);
+
 private
    ------------
    -- Shared --
@@ -214,9 +217,8 @@ private
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Struct)
-   with
-      Pre => not Is_Empty (Item);
+      Item   : Struct) with
+     Pre => not Is_Empty (Item);
 
    for Struct'Read use Read;
    for Struct'Write use Write;
@@ -319,16 +321,25 @@ private
    -- Variants --
    --------------
    type Variant is new Container_Type with record
-      I : Root_Type_Holders.Holder := raise Initialisation_Required;
+      I : Root_Type_Holders.Holder;
    end record;
 
    overriding function Size
-     (X : Variant) return Ada.Streams.Stream_Element_Count;
+     (X : Variant) return Ada.Streams.Stream_Element_Count with
+     Pre => not Is_Empty (X);
+
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Variant);
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Variant);
+      Item   : Variant) with
+     Pre => not Is_Empty (Item);
 
-   for Variant'Input use Input;
+   for Variant'Read use Read;
    for Variant'Write use Write;
+
+   function Is_Empty (Container : Variant) return Boolean is
+     (Container.I.Is_Empty);
 end D_Bus.Types.Containers;

@@ -107,9 +107,9 @@ begin
          end;
          --  Container Types
       when Variant_CC =>
-         --  Note: an empty variant is an invalid type, so
-         --  we use INPUT to get a full type immediately.
-         return Variant'Input (Stream);
+         return Result : Variant do
+            Variant'Read (Stream, Result);
+         end return;
       when Struct_Start_CC =>
          return
            Temp : Struct :=
