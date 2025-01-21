@@ -9,17 +9,18 @@ package D_Bus.Types.Basic_Generic is
    -----------------
    -- Fixed Types --
    -----------------
-   --  Note: `Inner` must not be larger than 64 bits
    generic
       Type_Code : Signature_Element;
       type Inner is private;
+
+      with function Image (X : Inner) return String;
    package Fixed_Wrappers is
       type Outer is new Basic_Type with private;
 
       function "+" (X : Inner) return Outer;
       function "+" (X : Outer) return Inner;
 
-      overriding function Image (X : Outer) return String;
+      overriding function Image (X : Outer) return String is (Image (+X));
    private
       package Padded_Inners is new Padded_Types (Inner, Inner'Size / 8);
       type Outer is new Basic_Type with record
@@ -33,6 +34,11 @@ package D_Bus.Types.Basic_Generic is
       overriding function Size
         (X : Outer) return Ada.Streams.Stream_Element_Count is
         (Inner'Size / 8);
+
+      function "+" (X : Inner) return Outer is
+        ((I => Padded_Inners.Padded_Type (X)));
+
+      function "+" (X : Outer) return Inner is (Inner (X.I));
    end Fixed_Wrappers;
 
    generic
@@ -48,15 +54,23 @@ package D_Bus.Types.Basic_Generic is
       function Value (X : String) return Outer is (+Inner'Value (X));
       function Value (X : Wide_Wide_String) return Outer is
         (+Inner'Wide_Wide_Value (X));
+
+      overriding function Image (X : Outer) return String;
    private
-      package Fixed_Types is new Fixed_Wrappers (Type_Code, Inner);
+      package Fixed_Types is new Fixed_Wrappers
+        (Type_Code, Inner, Inner'Image);
       type Outer is new Fixed_Types.Outer with null record;
+
+      overriding function Signature (X : Outer) return Single_Signature is
+        (Fixed_Types.Outer (X).Signature);
+
+      overriding function Image (X : Outer) return String is
+        (Fixed_Types.Outer (X).Image);
 
       use type Fixed_Types.Outer;
       function "+" (X : Inner) return Outer is
-        (Fixed_Types.Outer'(+X) with null record);
+        (Fixed_Types."+" (X) with null record);
       function "+" (X : Outer) return Inner is (+Fixed_Types.Outer (X));
-
    end Discrete_Wrappers;
 
    generic
@@ -70,13 +84,22 @@ package D_Bus.Types.Basic_Generic is
       function "+" (X : Outer) return Inner;
 
       function Value (X : String) return Outer is (+Inner'Value (X));
+
+      overriding function Image (X : Outer) return String;
    private
-      package Fixed_Types is new Fixed_Wrappers (Type_Code, Inner);
+      package Fixed_Types is new Fixed_Wrappers
+        (Type_Code, Inner, Inner'Image);
       type Outer is new Fixed_Types.Outer with null record;
+
+      overriding function Signature (X : Outer) return Single_Signature is
+        (Fixed_Types.Outer (X).Signature);
+
+      overriding function Image (X : Outer) return String is
+        (Fixed_Types.Outer (X).Image);
 
       use type Fixed_Types.Outer;
       function "+" (X : Inner) return Outer is
-        (Fixed_Types.Outer'(+X) with null record);
+        (Fixed_Types."+" (X) with null record);
       function "+" (X : Outer) return Inner is (+Fixed_Types.Outer (X));
    end Real_Wrappers;
 
@@ -86,6 +109,7 @@ package D_Bus.Types.Basic_Generic is
    generic
       Type_Code : Signature_Element;
       type Data_Length_Type is mod <>;
+      --  Note: must not be larger than 64 bits
       type External_Type is new String;
    package String_Wrappers is
       type Outer is new Basic_Type with private with

@@ -54,7 +54,9 @@ package D_Bus.Types is
    ------------------------
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean;
    subtype Single_Signature is U_Single_Signature with
-       Dynamic_Predicate => Validate_Single_Signature (Single_Signature);
+       Dynamic_Predicate => Validate_Single_Signature (Single_Signature),
+       Predicate_Failure =>
+        "Invalid single signature " & String (Single_Signature);
    --  Note: This does NOT check container type nesting.
    --  This omission is out of consideration for performance.
    --  All other specified signature rules are checked.
@@ -62,8 +64,11 @@ package D_Bus.Types is
    function Validate_Contents_Signature
      (X : U_Contents_Signature) return Boolean;
    subtype Contents_Signature is U_Contents_Signature with
-       Dynamic_Predicate => Validate_Contents_Signature (Contents_Signature);
-       --  A type which contains a list of valid `Single_Signature`s
+       Dynamic_Predicate => Validate_Contents_Signature (Contents_Signature),
+       Predicate_Failure =>
+        "Invalid contents signature " & String (Contents_Signature);
+
+   --  A type which contains a list of valid `Single_Signature`s
 
    -------------------------
    -- Interned Signatures --

@@ -12,6 +12,7 @@ package body D_Bus.Messages is
    --------------------
    -- Message Serial --
    --------------------
+   --  TODO: per connection?
    protected Global_Serials is
       procedure Next_Serial (S : out Valid_Message_Serial);
    private
@@ -26,7 +27,7 @@ package body D_Bus.Messages is
       end Next_Serial;
    end Global_Serials;
 
-   package D_Message_Serials is new D_Bus.Types.Basic_Generic.Fixed_Wrappers
+   package D_Message_Serials is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
      (Type_Code => D_Bus.Types.Uint32_CC, Inner => U_Message_Serial);
    subtype D_Message_Serial is D_Message_Serials.Outer;
 
@@ -62,10 +63,10 @@ package body D_Bus.Messages is
    -----------------------
    -- Validity Checking --
    -----------------------
+   --  From dbus-binding-generator-ada/share/introspect.xsd
    Interface_Regexp : constant GNAT.Regexp.Regexp :=
      GNAT.Regexp.Compile
-       (Pattern => "^([a-zA-Z_]([a-zA-Z0-9_])*\.)+[a-zA-Z_]([a-zA-Z0-9_])*",
-        Glob    => True, Case_Sensitive => True);
+       (Pattern => "([a-zA-Z_]([a-zA-Z0-9_])*\.)+[a-zA-Z_]([a-zA-Z0-9_])*");
    function Valid_Interface (X : String) return Boolean is
    begin
       return GNAT.Regexp.Match (X, Interface_Regexp) and X'Length < 256;
@@ -74,9 +75,9 @@ package body D_Bus.Messages is
    ------------------
    -- Valid_Member --
    ------------------
+   --  From dbus-binding-generator-ada/share/introspect.xsd
    Member_Regexp : constant GNAT.Regexp.Regexp :=
-     GNAT.Regexp.Compile
-       (Pattern => "^([a-zA-Z0-9_])*$", Glob => True, Case_Sensitive => True);
+     GNAT.Regexp.Compile (Pattern => "([a-zA-Z0-9_])*");
    function Valid_Member (X : String) return Boolean is
    begin
       return GNAT.Regexp.Match (X, Member_Regexp) and X'Length < 256;
@@ -88,8 +89,7 @@ package body D_Bus.Messages is
    Bus_Regexp : constant GNAT.Regexp.Regexp :=
      GNAT.Regexp.Compile
        (Pattern =>
-          "^((:[A-Za-z0-9])|([A-Za-z]))(\.[a-zA-Z0-9]([a-zA-Z0-9_-])*)*$",
-        Glob    => True, Case_Sensitive => True);
+          "((:[A-Za-z0-9])|([A-Za-z]))((\.)*[a-zA-Z0-9]([a-zA-Z0-9_-])*)*");
    function Valid_Bus (X : String) return Boolean is
    begin
       return GNAT.Regexp.Match (X, Bus_Regexp) and X'Length < 256;
@@ -200,11 +200,12 @@ package body D_Bus.Messages is
    -- Add_Arguments --
    -------------------
    procedure Add_Arguments
-     (M : out Message; Arguments : in out D_Bus.Types.Argument_List)
+     (M : out Message; Arguments : D_Bus.Types.Argument_List)
    is
    begin
-      M.Arguments.Splice
-        (Before => D_Bus.Types.Argument_Lists.No_Element, Source => Arguments);
+      for A of Arguments loop
+         M.Arguments.Append (A);
+      end loop;
    end Add_Arguments;
 
    ------------
@@ -295,7 +296,7 @@ package body D_Bus.Messages is
      ME_Table_From_Ada (System.Default_Bit_Order);
    --  TODO actually implement
 
-   package D_Field_Types is new D_Bus.Types.Basic_Generic.Fixed_Wrappers
+   package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
      (Type_Code => 'y', Inner => Field_Type);
    subtype D_Field_Type is D_Field_Types.Outer;
 
@@ -399,7 +400,9 @@ package body D_Bus.Messages is
 
       --  Add calculated fields (currently SIGNATURE)
       RMH.Fields.Insert
-        (+F_Signature, +D_Bus.Types.Signature (Item.Arguments));
+        (+F_Signature,
+         D_Bus.Types.Containers."+"
+           (+D_Bus.Types.Signature (Item.Arguments)));
 
       --  Write header
       Raw_Message_Header'Write (Stream, RMH);

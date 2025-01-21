@@ -7,8 +7,7 @@ package body D_Bus.Types.Basic is
    --  From dbus-binding-generator-ada/share/introspect.xsd
    Object_Pattern : constant GNAT.Regexp.Regexp :=
      GNAT.Regexp.Compile
-       (Pattern => "^\/?(([a-zA-Z0-9_])+(\/([a-zA-Z0-9_])+)?)+$|^\/$",
-        Glob    => True, Case_Sensitive => True);
+       (Pattern => "\/?(([a-zA-Z0-9_])+(\/([a-zA-Z0-9_])+)?)+|\/");
 
    -----------
    -- Valid --

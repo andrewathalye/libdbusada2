@@ -2,12 +2,11 @@ pragma Ada_2022;
 
 with Ada.Text_IO; use Ada.Text_IO;
 
-with D_Bus.Types.Basic;
-   use D_Bus.Types.Basic;
+with D_Bus.Types.Basic; use D_Bus.Types.Basic;
 with D_Bus.Types.Containers;
 use type D_Bus.Types.Containers.Variant;
-with D_Bus.Types.Dispatching_Read;
 with D_Bus.Connection;
+with D_Bus.Messages;
 
 procedure Tests is
    Arr_V : D_Bus.Types.Containers.D_Array (D_Bus.Types.Intern ("v"));
@@ -27,9 +26,24 @@ begin
 
    Put_Line (Struct_esav.Image);
 
+   --  Write Message
    D_Bus.Connection.Open_Test_Stream (Stream);
-   D_Bus.Types.Containers.Struct'Write (Stream'Access, Struct_esav);
-   Put_Line (D_Bus.Types.Dispatching_Read (Stream'Access, "(a{sav})").Image);
+   Stream_Open :
+   declare
+      Sent, Recvd : D_Bus.Messages.Message;
+   begin
+      Sent :=
+        D_Bus.Messages.Compose_Call
+          (Path        => "/com/example/test/Object1",
+           M_Interface => "com.example.test.interface", Member => "TestProc",
+           Destination => "com.example.test");
+
+      D_Bus.Messages.Add_Arguments (Sent, [Struct_esav]);
+
+      D_Bus.Messages.Message'Write (Stream'Access, Sent);
+      D_Bus.Messages.Message'Read (Stream'Access, Recvd);
+      Put_Line (Recvd'Image);
+   end Stream_Open;
    D_Bus.Connection.Close_Test_Stream (Stream);
 
    --  (a{sav})

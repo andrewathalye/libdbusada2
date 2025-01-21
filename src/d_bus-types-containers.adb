@@ -1,7 +1,6 @@
 pragma Ada_2012;
 
 with Ada.Strings.Hash;
-with Ada.Text_IO; use Ada.Text_IO;
 with GNATCOLL.Strings;
 with Interfaces;
 
@@ -208,8 +207,6 @@ package body D_Bus.Types.Containers is
          begin
             Read_Count := Read_Count + Temp.Size;
             Item.Inner.Append (Temp);
-            Put_Line (Stream_Length'Image & " needed for array");
-            Put_Line ("Have " & Read_Count'Image);
          end;
       end loop;
    end Read;
@@ -421,9 +418,6 @@ package body D_Bus.Types.Containers is
          begin
             Item.Inner.Insert (Key, Value);
             Stream_Index := Stream_Index + Key.Size + Value.Size;
-
-            Put_Line (Stream_Length'Image & " needed for dict");
-            Put_Line ("Have " & Stream_Index'Image);
          end;
       end loop;
    end Read;
@@ -441,9 +435,8 @@ package body D_Bus.Types.Containers is
            Stream_Length + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
       end loop;
 
-      --  Write Length
-      Padded_Data_Lengths.Padded_Type'Write
-        (Stream, Padded_Data_Lengths.Padded_Type (Item.Size));
+      Stream_Element_Count'Write
+        (Stream, Stream_Length);
 
       --  Write Key - Value pairs
       for C in Item.Inner.Iterate loop
@@ -615,8 +608,6 @@ package body D_Bus.Types.Containers is
    begin
       --  Read signature
       D_Bus.Types.Basic.D_Signature'Read (Stream, VS);
-
-      Put_Line ("Variant signature: " & VS.Image);
 
       --  Read element
       declare

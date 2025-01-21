@@ -1,36 +1,6 @@
 pragma Ada_2022;
 
 package body D_Bus.Types.Basic_Generic is
-   --------------------
-   -- Basic_Wrappers --
-   --------------------
-   package body Fixed_Wrappers is
-      ---------
-      -- "+" --
-      ---------
-      function "+" (X : Inner) return Outer is
-      begin
-         return (I  => Padded_Inners.Padded_Type (X));
-      end "+";
-
-      ---------
-      -- "+" --
-      ---------
-      function "+" (X : Outer) return Inner is
-      begin
-         return Inner (X.I);
-      end "+";
-
-      -----------
-      -- Image --
-      -----------
-      overriding
-      function Image (X : Outer) return String is
-      begin
-         return X.I'Image;
-      end Image;
-   end Fixed_Wrappers;
-
    ---------------------
    -- String_Wrappers --
    ---------------------
@@ -56,8 +26,7 @@ package body D_Bus.Types.Basic_Generic is
       ----------
       -- Size --
       ----------
-      function Size (X : Outer) return Ada.Streams.Stream_Element_Count
-      is
+      function Size (X : Outer) return Ada.Streams.Stream_Element_Count is
          use type Ada.Streams.Stream_Element_Offset;
       begin
          return X.I.Element'Size / 8;

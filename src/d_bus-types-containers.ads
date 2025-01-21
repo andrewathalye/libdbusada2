@@ -14,7 +14,7 @@ package D_Bus.Types.Containers is
    -------------
    -- Structs --
    -------------
-   type Struct (Count : Positive) is new Container_Type with private;
+   type Struct (<>) is new Container_Type with private;
    --  Ada representation of a D_Bus Struct type
    --  A Struct type has a fixed signature and length, and may not be empty.
    --
@@ -66,7 +66,8 @@ package D_Bus.Types.Containers is
      ------------
      -- Arrays --
      ------------
-     --  Note: no Aggregate because of discriminant
+     --  Note: Aggregate cannot be provided due to the discriminant
+     --  Create an array by signature or by calling `+` with an argument list
    type Array_Cursor (<>) is private;
    No_Index : constant Array_Cursor;
 

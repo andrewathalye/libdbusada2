@@ -1,9 +1,10 @@
 pragma Ada_2012;
 
-with GNAT.OS_Lib;
 with Interfaces;
 
 with D_Bus.Types.Basic_Generic; use D_Bus.Types.Basic_Generic;
+
+with GNAT.OS_Lib;
 
 package D_Bus.Types.Basic is
    -----------------
@@ -16,7 +17,7 @@ package D_Bus.Types.Basic is
      Size => 32;
    package Booleans is new Discrete_Wrappers (Boolean_CC, Boolean_32);
    subtype D_Boolean is Booleans.Outer;
-   D_True : constant D_Boolean := "True";
+   D_True  : constant D_Boolean := "True";
    D_False : constant D_Boolean := "False";
 
    function "+" (X : D_Boolean) return Boolean is (Boolean (Booleans."+" (X)));
@@ -44,10 +45,16 @@ package D_Bus.Types.Basic is
    package Doubles is new Real_Wrappers (Double_CC, Interfaces.IEEE_Float_64);
    subtype Double is Doubles.Outer;
 
-   package File_Descriptors is new Fixed_Wrappers
-     (File_Descriptor_CC, GNAT.OS_Lib.File_Descriptor);
-   subtype File_Descriptor is File_Descriptors.Outer;
-   --  TODO Needs special help. this is wrong
+   type File_Descriptor is new Basic_Type with private;
+
+   function "+" (X : File_Descriptor) return GNAT.OS_Lib.File_Descriptor;
+   function "+" (X : GNAT.OS_Lib.File_Descriptor) return File_Descriptor;
+
+   overriding
+   function Signature (X : File_Descriptor) return Single_Signature;
+
+   overriding
+   function Image (X : File_Descriptor) return String;
 
    ------------------
    -- String Types --
@@ -60,7 +67,8 @@ package D_Bus.Types.Basic is
    type U_Object_Path is new String;
    function Validate_Object_Path (X : U_Object_Path) return Boolean;
    subtype Object_Path is U_Object_Path with
-       Dynamic_Predicate => Validate_Object_Path (Object_Path);
+       Dynamic_Predicate => Validate_Object_Path (Object_Path),
+       Predicate_Failure => "Invalid object path " & String (Object_Path);
 
    package Object_Paths is new String_Wrappers
      (Type_Code => Object_Path_CC, Data_Length_Type => Interfaces.Unsigned_32,
@@ -74,4 +82,40 @@ package D_Bus.Types.Basic is
    subtype D_Signature is Signatures.Outer;
    --  For a lightweight Ada type, use `Single_Signature`
    --  or `Contents_Signature`
+private
+   type File_Descriptor is new Basic_Type with record
+      Inner : GNAT.OS_Lib.File_Descriptor;
+   end record;
+
+   --  TODO implement sending file descriptors!
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out File_Descriptor) is null;
+
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : File_Descriptor) is null;
+
+   for File_Descriptor'Read use Read;
+   for File_Descriptor'Write use Write;
+
+   overriding
+   function Size
+     (X : File_Descriptor) return Ada.Streams.Stream_Element_Count is
+     (0);
+
+   overriding
+   function Image
+     (X : File_Descriptor) return String is (X.Inner'Image);
+
+   overriding
+   function Signature (X : File_Descriptor) return Single_Signature is
+     ((1 => File_Descriptor_CC));
+
+   function "+" (X : File_Descriptor) return GNAT.OS_Lib.File_Descriptor
+   is (X.Inner);
+
+   function "+" (X : GNAT.OS_Lib.File_Descriptor) return File_Descriptor
+   is ((Inner => X));
+
 end D_Bus.Types.Basic;
