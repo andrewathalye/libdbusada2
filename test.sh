@@ -11,7 +11,7 @@ function testsave {
    kill $TESTPID
    echo
    hexdump -C out.dat
-   rm out.dat
+#   rm out.dat
 }
 
 gprbuild -Pgpr/tests || exit -1

@@ -1,6 +1,7 @@
 pragma Ada_2012;
 
 with Ada.IO_Exceptions;
+with Ada.Tags;
 
 with Ada.Strings.Unbounded;
 with Ada.Directories;
@@ -27,6 +28,18 @@ package body D_Bus.Connection is
    -------------
    -- Streams --
    -------------
+   function As_Alignable_Stream
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+      return Alignable_Stream_Access
+   is
+   begin
+      if Stream.all not in Alignable_Stream'Class then
+         raise Not_Alignable_Stream
+           with Ada.Tags.Expanded_Name (Stream.all'Tag);
+      end if;
+      return Alignable_Stream (Stream.all)'Access;
+   end As_Alignable_Stream;
+
    procedure Reset_Count (Stream : not null access Alignable_Stream) is
    begin
       Stream.Read_Count  := 0;
@@ -100,14 +113,13 @@ package body D_Bus.Connection is
    -- Test Only --
    ---------------
    procedure Open_Test_Stream (Stream : out Alignable_Stream) is
-      Address :
-        constant GNAT.Sockets.Sock_Addr_Type :=
-          (Family => GNAT.Sockets.Family_Unix,
-           Name => Ada.Strings.Unbounded.To_Unbounded_String ("outsock"));
+      Address : constant GNAT.Sockets.Sock_Addr_Type :=
+        (Family => GNAT.Sockets.Family_Unix,
+         Name   => Ada.Strings.Unbounded.To_Unbounded_String ("outsock"));
 
-      Server_Sock : GNAT.Sockets.Socket_Type;
+      Server_Sock    : GNAT.Sockets.Socket_Type;
       Client_Address : GNAT.Sockets.Sock_Addr_Type;
-      Discard : Boolean;
+      Discard        : Boolean;
    begin
       if Ada.Directories.Exists ("outsock") then
          GNAT.OS_Lib.Delete_File ("outsock", Discard);
@@ -117,8 +129,7 @@ package body D_Bus.Connection is
         (Socket => Server_Sock, Family => GNAT.Sockets.Family_Unix);
       GNAT.Sockets.Bind_Socket (Server_Sock, Address);
       GNAT.Sockets.Listen_Socket (Server_Sock);
-      GNAT.Sockets.Accept_Socket
-        (Server_Sock, Stream.Socket, Client_Address);
+      GNAT.Sockets.Accept_Socket (Server_Sock, Stream.Socket, Client_Address);
    end Open_Test_Stream;
 
    procedure Close_Test_Stream (Stream : out Alignable_Stream) is

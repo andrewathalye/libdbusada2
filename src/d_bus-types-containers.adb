@@ -363,21 +363,17 @@ package body D_Bus.Types.Containers is
    -----------
    function Has_Element (Position : Dict_Cursor) return Boolean is
    begin
-      return Position.Container.Inner.Contains (Position.Key.all);
+      return Position /= No_Key;
    end Has_Element;
 
    function Key (Position : Dict_Cursor) return Basic_Type'Class is
    begin
-      if Position.Key = null then
-         raise Constraint_Error;
-      end if;
-
-      return Position.Key.all;
+      return Hash_Maps.Key (Hash_Maps.Cursor (Position));
    end Key;
 
    function Element (Position : Dict_Cursor) return Root_Type'Class is
    begin
-      return Position.Container.Inner (Position.Key.all);
+      return Hash_Maps.Element (Hash_Maps.Cursor (Position));
    end Element;
 
    function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type is
@@ -435,8 +431,8 @@ package body D_Bus.Types.Containers is
            Stream_Length + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
       end loop;
 
-      Stream_Element_Count'Write
-        (Stream, Stream_Length);
+      Padded_Data_Lengths.Padded_Type'Write
+        (Stream, Padded_Data_Lengths.Padded_Type (Stream_Length));
 
       --  Write Key - Value pairs
       for C in Item.Inner.Iterate loop
@@ -483,44 +479,6 @@ package body D_Bus.Types.Containers is
       return Buf.To_String;
    end Image;
 
-   overriding function First (Object : Dict) return Dict_Cursor is
-      use type Hash_Maps.Cursor;
-      FEC : constant Hash_Maps.Cursor := Object.Inner.First;
-      --  First Element Cursor
-   begin
-      if FEC = Hash_Maps.No_Element then
-         return No_Key;
-      end if;
-
-      return
-        (Container => Object'Unchecked_Access,
-         Key       => Hash_Maps.Key (FEC)'Unrestricted_Access);
-      --  Note: UNRESTRICTED because ALIASED not given
-   end First;
-
-   overriding function Next
-     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor
-   is
-      use type Hash_Maps.Cursor;
-
-      NPC : Hash_Maps.Cursor;
-      --  Next Position Cursor
-   begin
-      if Position = No_Key then
-         raise Constraint_Error;
-      end if;
-
-      NPC := Hash_Maps.Next (Object.Inner.Find (Position.Key.all));
-      if NPC = Hash_Maps.No_Element then
-         return No_Key;
-      else
-         return
-           (Container => Object'Unchecked_Access,
-            Key       => Hash_Maps.Key (NPC)'Unrestricted_Access);
-         --  Note: unrestricted because `aliased` not given
-      end if;
-   end Next;
-
    function Constant_Reference_D
      (Container : aliased Dict; Key : Basic_Type'Class)
       return Constant_Reference_Type
@@ -535,7 +493,8 @@ package body D_Bus.Types.Containers is
    function Constant_Reference_D
      (Container : aliased Dict; Position : Dict_Cursor)
       return Constant_Reference_Type is
-     (Constant_Reference_D (Position.Container.all, Position.Key.all));
+     (Constant_Reference_D
+        (Container, Hash_Maps.Key (Hash_Maps.Cursor (Position))));
 
    function Reference_D
      (Container : aliased in out Dict; Key : Basic_Type'Class)
@@ -551,7 +510,7 @@ package body D_Bus.Types.Containers is
    function Reference_D
      (Container : aliased in out Dict; Position : Dict_Cursor)
       return Reference_Type is
-     (Reference_D (Container, Position.Key.all));
+     (Reference_D (Container, Hash_Maps.Key (Hash_Maps.Cursor (Position))));
 
    overriding function Contents (X : Dict) return Contents_Signature is
    begin

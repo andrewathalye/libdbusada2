@@ -1,6 +1,7 @@
 pragma Ada_2012;
 
 with Ada.Unchecked_Conversion;
+with D_Bus.Connection;
 with D_Bus.Types.Dispatching_Read;
 with Interfaces;
 with System;
@@ -12,7 +13,6 @@ package body D_Bus.Messages is
    --------------------
    -- Message Serial --
    --------------------
-   --  TODO: per connection?
    protected Global_Serials is
       procedure Next_Serial (S : out Valid_Message_Serial);
    private
@@ -22,8 +22,8 @@ package body D_Bus.Messages is
    protected body Global_Serials is
       procedure Next_Serial (S : out Valid_Message_Serial) is
       begin
-         Current_Serial := Current_Serial + 1;
          S              := Current_Serial;
+         Current_Serial := Current_Serial + 1;
       end Next_Serial;
    end Global_Serials;
 
@@ -94,6 +94,16 @@ package body D_Bus.Messages is
    begin
       return GNAT.Regexp.Match (X, Bus_Regexp) and X'Length < 256;
    end Valid_Bus;
+
+   procedure Assert_Or_Protocol_Error (Expr : Boolean);
+   --  Assert that the expression or true or raise a protocol error
+
+   procedure Assert_Or_Protocol_Error (Expr : Boolean) is
+   begin
+      if not Expr then
+         raise Protocol_Error;
+      end if;
+   end Assert_Or_Protocol_Error;
 
    ------------------
    -- Compose_Call --
@@ -223,18 +233,27 @@ package body D_Bus.Messages is
       use type D_Bus.Types.Basic.D_Object_Path;
    begin
       return +D_Bus.Types.Basic.D_Object_Path (M.Fields (F_Path).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end Path;
 
    function M_Interface (M : Message) return Interface_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Interface).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end M_Interface;
 
    function Member (M : Message) return Member_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Member).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end Member;
 
    function Error (M : Message) return Error_Name is
@@ -242,7 +261,6 @@ package body D_Bus.Messages is
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Error_Name).Get);
    end Error;
-
    function Is_Reply (Original, Reply : Message) return Boolean is
       use type D_Message_Serial;
    begin
@@ -250,24 +268,36 @@ package body D_Bus.Messages is
         Original.Flags.No_Reply_Expected
         and then Original.Serial =
           +D_Message_Serial (Reply.Fields (F_Reply_Serial).Get);
+   exception
+      when Constraint_Error =>
+         return False;
    end Is_Reply;
 
    function Destination (M : Message) return Bus_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Destination).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end Destination;
 
    function Sender (M : Message) return Bus_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Sender).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end Sender;
 
    function Signature (M : Message) return D_Bus.Types.Contents_Signature is
       use type D_Bus.Types.Basic.D_Signature;
    begin
       return +D_Bus.Types.Basic.D_Signature (M.Fields (F_Signature).Get);
+   exception
+      when Constraint_Error =>
+         raise Field_Absent;
    end Signature;
 
    ---------------
@@ -297,14 +327,15 @@ package body D_Bus.Messages is
    --  TODO actually implement
 
    package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
-     (Type_Code => 'y', Inner => Field_Type);
+     (Type_Code => D_Bus.Types.Byte_CC, Inner => Field_Type);
    subtype D_Field_Type is D_Field_Types.Outer;
 
    type RMH_Padding_NR is null record;
    package RMH_Padding is new D_Bus.Types.Padded_Types (RMH_Padding_NR, 8);
 
    subtype Field_Dict is
-     D_Bus.Types.Containers.Dict ('y', D_Bus.Types.Intern ("v"));
+     D_Bus.Types.Containers.Dict
+       (D_Bus.Types.Byte_CC, D_Bus.Types.Intern ("v"));
 
    type Raw_Message_Header is record
       Endianness       : Message_Endianness    := Default_Message_Endianness;
@@ -324,16 +355,23 @@ package body D_Bus.Messages is
       use D_Bus.Types.Containers;
       use type D_Bus.Types.Basic.Uint32;
       use type D_Bus.Types.Basic.D_Signature;
+      use type D_Bus.Types.Basic.Byte;
 
       use type D_Message_Serial;
-      use type D_Field_Type;
 
       use type Interfaces.Unsigned_8;
       use type Interfaces.Unsigned_32;
 
+      function Field_From_Byte is new Ada.Unchecked_Conversion
+        (Interfaces.Unsigned_8, Field_Type);
+
       RMH : Raw_Message_Header;
    begin
+      D_Bus.Connection.Reset_Count
+        (D_Bus.Connection.As_Alignable_Stream (Stream));
+
       --  Read raw header
+      --  TODO we actually need to read endianness separately
       Raw_Message_Header'Read (Stream, RMH);
 
       if RMH.Endianness /= Default_Message_Endianness then
@@ -348,10 +386,31 @@ package body D_Bus.Messages is
       Item.M_Type := RMH.M_Type;
       Item.Flags  := RMH.Flags;
 
-      for Cursor in RMH.Fields.Iterate_D loop
+      --  When we read the fields back we can only get bytes :(
+      --  There is no way to automatically determine that the actual type
+      --  is Field_Type
+      for Cursor in RMH.Fields.Iterate loop
          Item.Fields.Insert
-           (+D_Field_Type (Key (Cursor)), Variant (Element (Cursor)));
+           (Field_From_Byte (+D_Bus.Types.Basic.Byte (Key (Cursor))),
+            Variant (Element (Cursor)));
       end loop;
+
+      --  Check that the required fields are contained for each type
+      case RMH.M_Type is
+         when Invalid => raise Protocol_Error;
+         when Method_Call =>
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
+         when Method_Return =>
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
+         when Error =>
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Error_Name));
+         when Signal =>
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Interface));
+            Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
+      end case;
 
       --  Handle messages with no body
       if +RMH.Body_Length = 0 then
@@ -384,6 +443,9 @@ package body D_Bus.Messages is
       RMH : Raw_Message_Header;
       S   : Valid_Message_Serial;
    begin
+      D_Bus.Connection.Reset_Count
+        (D_Bus.Connection.As_Alignable_Stream (Stream));
+
       --  Prepare header
       RMH.M_Type      := Item.M_Type;
       RMH.Flags       := Item.Flags;
@@ -401,8 +463,7 @@ package body D_Bus.Messages is
       --  Add calculated fields (currently SIGNATURE)
       RMH.Fields.Insert
         (+F_Signature,
-         D_Bus.Types.Containers."+"
-           (+D_Bus.Types.Signature (Item.Arguments)));
+         D_Bus.Types.Containers."+" (+D_Bus.Types.Signature (Item.Arguments)));
 
       --  Write header
       Raw_Message_Header'Write (Stream, RMH);

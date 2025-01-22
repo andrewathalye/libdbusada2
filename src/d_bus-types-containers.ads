@@ -86,7 +86,7 @@ package D_Bus.Types.Containers is
    type D_Array (Element_Signature : Interned_Single_Signature) is
      new Container_Type and Array_Iterator with private with
      Constant_Indexing => Constant_Reference_A,
-     Variable_Indexing => Reference_A, Default_Iterator => Iterate_A,
+     Variable_Indexing => Reference_A, Default_Iterator => Iterate,
      Iterator_Element  => Root_Type'Class;
 
    function Constant_Reference_A
@@ -105,7 +105,7 @@ package D_Bus.Types.Containers is
      (Container : aliased in out D_Array; Position : Array_Cursor)
       return Reference_Type;
 
-   function Iterate_A (Container : D_Array) return Array_Iterator'Class is
+   function Iterate (Container : D_Array) return Array_Iterator'Class is
      (Container);
 
    procedure Append (Container : in out D_Array; Element : Root_Type'Class);
@@ -140,7 +140,7 @@ package D_Bus.Types.Containers is
    is
      new Container_Type and Dict_Iterator with private with
      Constant_Indexing => Constant_Reference_D,
-     Variable_Indexing => Reference_D, Default_Iterator => Iterate_D,
+     Variable_Indexing => Reference_D, Default_Iterator => Iterate,
      Iterator_Element  => Root_Type'Class;
 
    function Constant_Reference_D
@@ -159,7 +159,7 @@ package D_Bus.Types.Containers is
      (Container : aliased in out Dict; Position : Dict_Cursor)
       return Reference_Type;
 
-   function Iterate_D (Container : Dict) return Dict_Iterator'Class is
+   function Iterate (Container : Dict) return Dict_Iterator'Class is
      (Container);
 
    procedure Insert
@@ -280,18 +280,15 @@ private
    -----------
    -- Dicts --
    -----------
-   type Dict_Cursor is record
-      Container : access constant Dict;
-      Key       : access constant Basic_Type'Class;
-   end record;
-
-   No_Key : constant Dict_Cursor := (null, null);
-
    function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
 
    package Hash_Maps is new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type => Basic_Type'Class, Element_Type => Root_Type'Class,
       Hash     => Hash, Equivalent_Keys => "=");
+
+   type Dict_Cursor is new Hash_Maps.Cursor;
+
+   No_Key : constant Dict_Cursor := Dict_Cursor (Hash_Maps.No_Element);
 
    type Dict
      (Key_Signature     : Basic_Signature_Element;
@@ -312,9 +309,11 @@ private
    for Dict'Read use Read;
    for Dict'Write use Write;
 
-   overriding function First (Object : Dict) return Dict_Cursor;
+   overriding function First (Object : Dict) return Dict_Cursor
+   is (Dict_Cursor (Object.Inner.First));
    overriding function Next
-     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor;
+     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor
+   is (Dict_Cursor (Hash_Maps.Next (Hash_Maps.Cursor (Position))));
 
    overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count;
 

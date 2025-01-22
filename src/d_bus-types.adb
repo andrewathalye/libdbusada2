@@ -332,17 +332,6 @@ package body D_Bus.Types is
    -- Padded Types --
    ------------------
    package body Padded_Types is
-      function To_ASA
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-         return D_Bus.Connection.Alignable_Stream_Access;
-      function To_ASA
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-         return D_Bus.Connection.Alignable_Stream_Access
-      is
-      begin
-         return D_Bus.Connection.Alignable_Stream (Stream.all)'Access;
-      end To_ASA;
-
       ----------
       -- Read --
       ----------
@@ -353,7 +342,7 @@ package body D_Bus.Types is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-           To_ASA (Stream);
+            D_Bus.Connection.As_Alignable_Stream (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
            ASA.Read_Count mod
@@ -380,7 +369,7 @@ package body D_Bus.Types is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-           To_ASA (Stream);
+            D_Bus.Connection.As_Alignable_Stream (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
            ASA.Write_Count mod

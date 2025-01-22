@@ -8,6 +8,7 @@ private with Ada.Containers.Ordered_Maps;
 
 package D_Bus.Messages is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
+   pragma Assertion_Policy (Pre => Check);
 
    ------------------
    -- Base Message --
@@ -118,11 +119,12 @@ package D_Bus.Messages is
    ---------------------
    -- Message Parsing --
    ---------------------
-   function M_Type (M : Message) return Message_Type;
+   function M_Type (M : Message) return Message_Type with
+     Global => null;
+   pragma Pure_Function (M_Type);
 
    Field_Absent : exception;
    --  Raised when the requested field is not present
-   --  TODO currently we’ll get constraint error instead
 
    function Path (M : Message) return D_Bus.Types.Basic.Object_Path;
    --  Obligatory in Method_Call and Signal
@@ -136,13 +138,13 @@ package D_Bus.Messages is
    --  Obligatory in Method_Call and Signal
    --  May raise `Field_Absent`
 
-   function Error (M : Message) return Error_Name;
-   --  Present only in Error
-   --  May raise `Field_Absent`
+   function Error (M : Message) return Error_Name with
+     Pre => M_Type (M) = Error;
 
-   function Is_Reply (Original, Reply : Message) return Boolean;
-   --  Present only in Method_Return and Error
-   --  May raise `Field_Absent`
+   function Is_Reply (Original, Reply : Message) return Boolean with
+     Pre =>
+      M_Type (Original) = Method_Call and
+      M_Type (Reply) in Method_Return | Error;
 
    function Destination (M : Message) return Bus_Name;
    function Sender (M : Message) return Bus_Name;

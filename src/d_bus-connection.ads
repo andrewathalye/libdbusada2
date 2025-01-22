@@ -16,11 +16,11 @@ package D_Bus.Connection is
 
    function Connected (C : U_Connection) return Boolean;
 
-   subtype Disconnected_Connection is U_Connection
-   with Dynamic_Predicate => not Connected (Disconnected_Connection);
+   subtype Disconnected_Connection is U_Connection with
+       Dynamic_Predicate => not Connected (Disconnected_Connection);
 
-   subtype Connected_Connection is U_Connection
-   with Dynamic_Predicate => Connected (Connected_Connection);
+   subtype Connected_Connection is U_Connection with
+       Dynamic_Predicate => Connected (Connected_Connection);
 
    procedure Disconnect (C : in out Connected_Connection);
    --  Disconnect and destroy data held by `C`
@@ -33,18 +33,25 @@ package D_Bus.Connection is
    type Alignable_Stream_Access is access all Alignable_Stream;
    --  A stream which supports aligning data reads and writes.
 
-   procedure Reset_Count
-     (Stream : not null access Alignable_Stream);
+   Not_Alignable_Stream : exception;
+   function As_Alignable_Stream
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
+      return Alignable_Stream_Access;
+   --  Safely convert an arbitrary Stream to an Alignable_Stream
+   --  iff that Stream was originally an Alignable_Stream
+   --  Raise `Not_Alignable_Stream` on exception
+
+   procedure Reset_Count (Stream : not null access Alignable_Stream);
    --  Reset the stream’s read/write statistics.
 
    function Read_Count
      (Stream : not null access Alignable_Stream)
-     return Ada.Streams.Stream_Element_Offset;
+      return Ada.Streams.Stream_Element_Offset;
    --  Get the current read offset into `Stream`
 
    function Write_Count
      (Stream : not null access Alignable_Stream)
-     return Ada.Streams.Stream_Element_Offset;
+      return Ada.Streams.Stream_Element_Offset;
    --  Get the current write offset into `Stream`
 
    ---------------------
@@ -65,40 +72,36 @@ package D_Bus.Connection is
    ----------------
    -- Clientside --
    ----------------
-   procedure Connect
-     (C : in out Disconnected_Connection;
-      Address : String);
+   procedure Connect (C : in out Disconnected_Connection; Address : String);
    --  Where `Address` conforms to the specification
    --  Return when `C` has connected to `Address`
 
    ----------------
    -- Serverside --
    ----------------
-   procedure Listen
-     (C : in out Disconnected_Connection;
-      Address : String);
+   procedure Listen (C : in out Disconnected_Connection; Address : String);
    --  Where `Address` conforms to the specification
    --  Return when a client has connected to `Address`
 private
    type Alignable_Stream is new Ada.Streams.Root_Stream_Type with record
-      Socket : GNAT.Sockets.Socket_Type;
-      Read_Count : Ada.Streams.Stream_Element_Count := 0;
+      Socket      : GNAT.Sockets.Socket_Type;
+      Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
    end record;
 
    overriding procedure Read
      (Stream : in out Alignable_Stream;
-      Item   : out Ada.Streams.Stream_Element_Array;
-      Last   : out Ada.Streams.Stream_Element_Offset);
+      Item   :    out Ada.Streams.Stream_Element_Array;
+      Last   :    out Ada.Streams.Stream_Element_Offset);
 
    overriding procedure Write
      (Stream : in out Alignable_Stream;
-      Item   : Ada.Streams.Stream_Element_Array);
+      Item   :        Ada.Streams.Stream_Element_Array);
 
    type U_Connection is record
-      Connected : Boolean := False;
-      Socket : GNAT.Sockets.Socket_Type;
-      Stream : Alignable_Stream_Access;
+      Connected       : Boolean := False;
+      Socket          : GNAT.Sockets.Socket_Type;
+      Stream          : Alignable_Stream_Access;
       Unix_Fd_Support : Boolean := False;
    end record;
 end D_Bus.Connection;

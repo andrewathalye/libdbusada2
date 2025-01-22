@@ -18,15 +18,14 @@ procedure Tests is
 
    Stream : aliased D_Bus.Connection.Alignable_Stream;
 begin
+   Put_Line ("Produce Arguments");
    Arr_V.Append (+Byte'(1));
 
    Dict_sav.Insert (D_String'("Hello"), Arr_V);
 
    Struct_esav.Set (1, Dict_sav);
 
-   Put_Line (Struct_esav.Image);
-
-   --  Write Message
+   Put_Line ("Open Stream");
    D_Bus.Connection.Open_Test_Stream (Stream);
    Stream_Open :
    declare
@@ -36,13 +35,35 @@ begin
         D_Bus.Messages.Compose_Call
           (Path        => "/com/example/test/Object1",
            M_Interface => "com.example.test.interface", Member => "TestProc",
-           Destination => "com.example.test");
+           Destination => "com.example.test.server");
 
       D_Bus.Messages.Add_Arguments (Sent, [Struct_esav]);
 
+      Put_Line ("Write Message");
       D_Bus.Messages.Message'Write (Stream'Access, Sent);
+
+      Put_Line ("Read Message");
       D_Bus.Messages.Message'Read (Stream'Access, Recvd);
       Put_Line (Recvd'Image);
+
+      for Arg of D_Bus.Messages.Arguments (Recvd) loop
+         Put_Line (Arg.Image);
+      end loop;
+
+      Sent := D_Bus.Messages.Compose_Error
+        (Flags => (No_Reply_Expected => True, others => <>),
+         Error => "org.freedesktop.DBus.Error.Failed",
+         Reply_To => Recvd,
+         Destination => "com.example.test.client");
+
+      Put_Line ("Write Reply");
+      D_Bus.Messages.Message'Write (Stream'Access, Sent);
+
+      Put_Line ("Read Reply");
+      D_Bus.Messages.Message'Read (Stream'Access, Recvd);
+      Put_Line (Recvd'Image);
+
+      Put_Line (D_Bus.Messages.Error (Recvd));
    end Stream_Open;
    D_Bus.Connection.Close_Test_Stream (Stream);
 
