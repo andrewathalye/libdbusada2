@@ -16,7 +16,7 @@ procedure Tests is
    Struct_esav : D_Bus.Types.Containers.Struct :=
      D_Bus.Types.Containers.Empty ("a{sav}");
 
-   Stream : aliased D_Bus.Connection.Alignable_Stream;
+   Connection : aliased D_Bus.Connection.Connection;
 begin
    Put_Line ("Produce Arguments");
    Arr_V.Append (+Byte'(1));
@@ -25,8 +25,8 @@ begin
 
    Struct_esav.Set (1, Dict_sav);
 
-   Put_Line ("Open Stream");
-   D_Bus.Connection.Open_Test_Stream (Stream);
+   Put_Line ("Open Connection");
+   D_Bus.Connection.Connect (Connection, "autolaunch");
    Stream_Open :
    declare
       Sent, Recvd : D_Bus.Messages.Message;
@@ -39,11 +39,9 @@ begin
 
       D_Bus.Messages.Add_Arguments (Sent, [Struct_esav]);
 
-      Put_Line ("Write Message");
-      D_Bus.Messages.Message'Write (Stream'Access, Sent);
+      D_Bus.Connection.Send (Connection, Sent);
 
-      Put_Line ("Read Message");
-      D_Bus.Messages.Message'Read (Stream'Access, Recvd);
+      D_Bus.Connection.Receive (Connection, Recvd);
       Put_Line (Recvd'Image);
 
       for Arg of D_Bus.Messages.Arguments (Recvd) loop
@@ -56,16 +54,13 @@ begin
          Reply_To => Recvd,
          Destination => "com.example.test.client");
 
-      Put_Line ("Write Reply");
-      D_Bus.Messages.Message'Write (Stream'Access, Sent);
-
-      Put_Line ("Read Reply");
-      D_Bus.Messages.Message'Read (Stream'Access, Recvd);
+      D_Bus.Connection.Send (Connection, Sent);
+      D_Bus.Connection.Receive (Connection, Recvd);
       Put_Line (Recvd'Image);
 
       Put_Line (D_Bus.Messages.Error (Recvd));
    end Stream_Open;
-   D_Bus.Connection.Close_Test_Stream (Stream);
+   D_Bus.Connection.Disconnect (Connection);
 
    --  (a{sav})
    --  ([{Hello.s => [v'1.y]}])

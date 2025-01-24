@@ -3,27 +3,17 @@ pragma Ada_2012;
 with Ada.IO_Exceptions;
 with Ada.Tags;
 
-with Ada.Strings.Unbounded;
-with Ada.Directories;
-with GNAT.OS_Lib;
+with GNAT.Regpat;
 
 package body D_Bus.Connection is
    ---------------
    -- Connected --
    ---------------
-   function Connected (C : U_Connection) return Boolean is
+   function Connected (C : Connection) return Boolean is
+      use type GNAT.Sockets.Socket_Type;
    begin
-      return C.Connected;
+      return C.Socket /= GNAT.Sockets.No_Socket;
    end Connected;
-
-   ----------------
-   -- Disconnect --
-   ----------------
-   procedure Disconnect (C : in out Connected_Connection) is
-   begin
-      C.Connected := False;
-      GNAT.Sockets.Close_Socket (C.Socket);
-   end Disconnect;
 
    -------------
    -- Streams --
@@ -37,17 +27,11 @@ package body D_Bus.Connection is
          raise Not_Alignable_Stream
            with Ada.Tags.Expanded_Name (Stream.all'Tag);
       end if;
-      return Alignable_Stream (Stream.all)'Access;
+      return Alignable_Stream'Class (Stream.all)'Access;
    end As_Alignable_Stream;
 
-   procedure Reset_Count (Stream : not null access Alignable_Stream) is
-   begin
-      Stream.Read_Count  := 0;
-      Stream.Write_Count := 0;
-   end Reset_Count;
-
    function Read_Count
-     (Stream : not null access Alignable_Stream)
+     (Stream : not null access Canonical_Alignable_Stream)
       return Ada.Streams.Stream_Element_Offset
    is
    begin
@@ -55,7 +39,7 @@ package body D_Bus.Connection is
    end Read_Count;
 
    function Write_Count
-     (Stream : not null access Alignable_Stream)
+     (Stream : not null access Canonical_Alignable_Stream)
       return Ada.Streams.Stream_Element_Offset
    is
    begin
@@ -63,20 +47,20 @@ package body D_Bus.Connection is
    end Write_Count;
 
    overriding procedure Read
-     (Stream : in out Alignable_Stream;
+     (Stream : in out Canonical_Alignable_Stream;
       Item   :    out Ada.Streams.Stream_Element_Array;
       Last   :    out Ada.Streams.Stream_Element_Offset)
    is
       use type Ada.Streams.Stream_Element_Offset;
    begin
       GNAT.Sockets.Receive_Socket
-        (Socket => Stream.Socket, Item => Item, Last => Last);
+        (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
 
       Stream.Read_Count := Stream.Read_Count + Last;
    end Read;
 
    overriding procedure Write
-     (Stream : in out Alignable_Stream;
+     (Stream : in out Canonical_Alignable_Stream;
       Item   :        Ada.Streams.Stream_Element_Array)
    is
       use type Ada.Streams.Stream_Element_Offset;
@@ -84,7 +68,7 @@ package body D_Bus.Connection is
       Last : Ada.Streams.Stream_Element_Offset;
    begin
       GNAT.Sockets.Send_Socket
-        (Socket => Stream.Socket, Item => Item, Last => Last);
+        (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
 
       Stream.Write_Count := Stream.Write_Count + Last;
 
@@ -96,63 +80,68 @@ package body D_Bus.Connection is
    --------------
    -- Messages --
    --------------
-   procedure Send (C : Connected_Connection; M : D_Bus.Messages.Message) is
+   procedure Send
+     (C : aliased Connection; M : D_Bus.Messages.Message)
+   is
+      Stream : aliased Canonical_Alignable_Stream :=
+        (Ada.Streams.Root_Stream_Type with Connection => C'Unrestricted_Access,
+         others                                       => <>);
    begin
-      Reset_Count (C.Stream);
-      D_Bus.Messages.Message'Write (C.Stream, M);
+      D_Bus.Messages.Message'Write (Stream'Access, M);
    end Send;
 
-   function Receive (C : Connected_Connection) return D_Bus.Messages.Message is
+   procedure Receive
+     (C : aliased Connection;
+      M : out D_Bus.Messages.Message)
+   is
+      Stream : aliased Canonical_Alignable_Stream :=
+        (Ada.Streams.Root_Stream_Type with Connection => C'Unrestricted_Access,
+         others                                       => <>);
    begin
-      return M : D_Bus.Messages.Message do
-         D_Bus.Messages.Message'Read (C.Stream, M);
-      end return;
+      D_Bus.Messages.Message'Read (Stream'Access, M);
    end Receive;
 
-   ---------------
-   -- Test Only --
-   ---------------
-   procedure Open_Test_Stream (Stream : out Alignable_Stream) is
-      Address : constant GNAT.Sockets.Sock_Addr_Type :=
-        (Family => GNAT.Sockets.Family_Unix,
-         Name   => Ada.Strings.Unbounded.To_Unbounded_String ("outsock"));
+   --------------------------
+   -- Connection Internals --
+   --------------------------
 
-      Server_Sock    : GNAT.Sockets.Socket_Type;
-      Client_Address : GNAT.Sockets.Sock_Addr_Type;
-      Discard        : Boolean;
+   ---------------------------------
+   -- Connection Public Interface --
+   ---------------------------------
+   pragma Style_Checks (Off);
+   Server_Regpat : constant GNAT.Regpat.Pattern_Matcher :=
+     GNAT.Regpat.Compile
+       (Expression =>
+          "([a-z]+:([a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+(,[a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+)*)?)(;[a-z]+:([a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+(,[a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+)*)?)*");
+   --  Note: completely custom, generated using script in tools/ from
+   --  specification
+   pragma Style_Checks (On);
+
+   function Is_Valid (Addr : String) return Boolean is
    begin
-      if Ada.Directories.Exists ("outsock") then
-         GNAT.OS_Lib.Delete_File ("outsock", Discard);
-      end if;
-
-      GNAT.Sockets.Create_Socket
-        (Socket => Server_Sock, Family => GNAT.Sockets.Family_Unix);
-      GNAT.Sockets.Bind_Socket (Server_Sock, Address);
-      GNAT.Sockets.Listen_Socket (Server_Sock);
-      GNAT.Sockets.Accept_Socket (Server_Sock, Stream.Socket, Client_Address);
-   end Open_Test_Stream;
-
-   procedure Close_Test_Stream (Stream : out Alignable_Stream) is
-   begin
-      GNAT.Sockets.Close_Socket (Stream.Socket);
-      Stream.Socket := GNAT.Sockets.No_Socket;
-   end Close_Test_Stream;
+      return GNAT.Regpat.Match (Server_Regpat, Addr);
+   end Is_Valid;
 
    pragma Warnings (Off);
-   ------------
-   -- Client --
-   ------------
-   procedure Connect (C : in out Disconnected_Connection; Address : String) is
+   procedure Connect
+     (C : in out Disconnected_Connection; Address : Server_Address)
+   is
    begin
       raise Program_Error with "Unimplemented procedure Connect";
    end Connect;
 
-   ------------
-   -- Server --
-   ------------
-   procedure Listen (C : in out Disconnected_Connection; Address : String) is
+   procedure Listen
+     (C : in out Disconnected_Connection; Address : Server_Address)
+   is
    begin
       raise Program_Error with "Unimplemented procedure Listen";
    end Listen;
    pragma Warnings (On);
+
+   procedure Disconnect (C : in out Connected_Connection) is
+   begin
+      GNAT.Sockets.Close_Socket (C.Socket);
+      C.Socket := GNAT.Sockets.No_Socket;
+   end Disconnect;
+
 end D_Bus.Connection;

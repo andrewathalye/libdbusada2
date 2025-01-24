@@ -1,7 +1,6 @@
 pragma Ada_2012;
 
 with Ada.Unchecked_Conversion;
-with D_Bus.Connection;
 with D_Bus.Types.Dispatching_Read;
 with Interfaces;
 with System;
@@ -317,14 +316,9 @@ package body D_Bus.Messages is
      (Big => Character'Pos ('B'), Little => Character'Pos ('l'));
 
    type ME_Table_From_Ada_T is array (System.Bit_Order) of Message_Endianness;
-   --  type ME_Table_To_Ada_T is array (Message_Endianness)
-   --     of System.Bit_Order;
    ME_Table_From_Ada          : constant ME_Table_From_Ada_T := (Big, Little);
-   --   ME_Table_To_Ada : constant ME_Table_To_Ada_T :=
-   --     (System.High_Order_First, System.Low_Order_First);
    Default_Message_Endianness : constant Message_Endianness  :=
      ME_Table_From_Ada (System.Default_Bit_Order);
-   --  TODO actually implement
 
    package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
      (Type_Code => D_Bus.Types.Byte_CC, Inner => Field_Type);
@@ -346,7 +340,39 @@ package body D_Bus.Messages is
       Serial           : D_Message_Serial;
       Fields           : Field_Dict;
       Padding          : RMH_Padding.Padded_Type;
-   end record;
+   end record
+   with
+      Read => Read_RMH;
+
+   procedure Read_RMH
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Raw_Message_Header);
+   --  Custom read procedure that checks endianness and protocol version
+
+
+   procedure Read_RMH
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Raw_Message_Header)
+   is
+      use type Interfaces.Unsigned_8;
+   begin
+      Message_Endianness'Read (Stream, Item.Endianness);
+      Assert_Or_Protocol_Error (Item.Endianness = Default_Message_Endianness);
+      --  TODO support other endianness values
+
+      Message_Type'Read (Stream, Item.M_Type);
+      Message_Flags'Read (Stream, Item.Flags);
+
+      Interfaces.Unsigned_8'Read (Stream, Item.Protocol_Version);
+      Assert_Or_Protocol_Error
+        (Item.Protocol_Version = Default_Protocol_Version);
+
+      --  All fields from here on out depend on endianness
+      D_Bus.Types.Basic.Uint32'Read (Stream, Item.Body_Length);
+      D_Message_Serial'Read (Stream, Item.Serial);
+      Field_Dict'Read (Stream, Item.Fields);
+      RMH_Padding.Padded_Type'Read (Stream, Item.Padding);
+   end Read_RMH;
 
    procedure Read
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
@@ -365,22 +391,12 @@ package body D_Bus.Messages is
       function Field_From_Byte is new Ada.Unchecked_Conversion
         (Interfaces.Unsigned_8, Field_Type);
 
-      RMH : Raw_Message_Header;
+      RMH        : Raw_Message_Header;
    begin
-      D_Bus.Connection.Reset_Count
-        (D_Bus.Connection.As_Alignable_Stream (Stream));
-
       --  Read raw header
-      --  TODO we actually need to read endianness separately
       Raw_Message_Header'Read (Stream, RMH);
 
-      if RMH.Endianness /= Default_Message_Endianness then
-         raise Protocol_Error with "Only native endianness supported";
-      end if;
-
-      if RMH.Protocol_Version /= Default_Protocol_Version then
-         raise Protocol_Error with "Wrong protocol version";
-      end if;
+      --  TODO handle endianness here
 
       Item := (Serial => Valid_Message_Serial'(+RMH.Serial), others => <>);
       Item.M_Type := RMH.M_Type;
@@ -397,7 +413,8 @@ package body D_Bus.Messages is
 
       --  Check that the required fields are contained for each type
       case RMH.M_Type is
-         when Invalid => raise Protocol_Error;
+         when Invalid =>
+            raise Protocol_Error;
          when Method_Call =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
@@ -443,9 +460,6 @@ package body D_Bus.Messages is
       RMH : Raw_Message_Header;
       S   : Valid_Message_Serial;
    begin
-      D_Bus.Connection.Reset_Count
-        (D_Bus.Connection.As_Alignable_Stream (Stream));
-
       --  Prepare header
       RMH.M_Type      := Item.M_Type;
       RMH.Flags       := Item.Flags;
