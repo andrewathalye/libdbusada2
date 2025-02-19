@@ -1,0 +1,8 @@
+Connect / Listen
+-> Parse Address
+-> Try one by one
+->> Open socket
+->> Connect / Listen
+->> Try Authentication
+->> Pass = Return
+->> Fail = Try Next

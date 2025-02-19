@@ -26,7 +26,7 @@ begin
    Struct_esav.Set (1, Dict_sav);
 
    Put_Line ("Open Connection");
-   D_Bus.Connection.Connect (Connection, "autolaunch");
+   D_Bus.Connection.Connect (Connection, "autolaunch:");
    Stream_Open :
    declare
       Sent, Recvd : D_Bus.Messages.Message;

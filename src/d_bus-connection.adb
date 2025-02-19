@@ -2,6 +2,7 @@ pragma Ada_2012;
 
 with Ada.IO_Exceptions;
 with Ada.Tags;
+with Ada.Text_IO;
 
 with GNAT.Regpat;
 
@@ -80,9 +81,7 @@ package body D_Bus.Connection is
    --------------
    -- Messages --
    --------------
-   procedure Send
-     (C : aliased Connection; M : D_Bus.Messages.Message)
-   is
+   procedure Send (C : aliased Connection; M : D_Bus.Messages.Message) is
       Stream : aliased Canonical_Alignable_Stream :=
         (Ada.Streams.Root_Stream_Type with Connection => C'Unrestricted_Access,
          others                                       => <>);
@@ -90,9 +89,7 @@ package body D_Bus.Connection is
       D_Bus.Messages.Message'Write (Stream'Access, M);
    end Send;
 
-   procedure Receive
-     (C : aliased Connection;
-      M : out D_Bus.Messages.Message)
+   procedure Receive (C : aliased Connection; M : out D_Bus.Messages.Message)
    is
       Stream : aliased Canonical_Alignable_Stream :=
         (Ada.Streams.Root_Stream_Type with Connection => C'Unrestricted_Access,
@@ -101,10 +98,6 @@ package body D_Bus.Connection is
       D_Bus.Messages.Message'Read (Stream'Access, M);
    end Receive;
 
-   --------------------------
-   -- Connection Internals --
-   --------------------------
-
    ---------------------------------
    -- Connection Public Interface --
    ---------------------------------
@@ -112,9 +105,9 @@ package body D_Bus.Connection is
    Server_Regpat : constant GNAT.Regpat.Pattern_Matcher :=
      GNAT.Regpat.Compile
        (Expression =>
-          "([a-z]+:([a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+(,[a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+)*)?)(;[a-z]+:([a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+(,[a-z]+=([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f]{2}))+)*)?)*");
-   --  Note: completely custom, generated using script in tools/ from
-   --  specification
+          "(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?)(?:;(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?))*");
+   --  Note: Generated from specification using tools/regex_serveraddr.sh
+   --  This will recognise any SYNTACTICALLY valid server address
    pragma Style_Checks (On);
 
    function Is_Valid (Addr : String) return Boolean is
@@ -122,21 +115,55 @@ package body D_Bus.Connection is
       return GNAT.Regpat.Match (Server_Regpat, Addr);
    end Is_Valid;
 
-   pragma Warnings (Off);
    procedure Connect
-     (C : in out Disconnected_Connection; Address : Server_Address)
+     (C       : in out Disconnected_Connection;
+      Address :        Server_Address := Default_Autolaunch)
    is
+      Set  : GNAT.Sockets.Socket_Set_Type := Parse_Address (Connect, Address);
+      Temp : GNAT.Sockets.Socket_Type;
    begin
-      raise Program_Error with "Unimplemented procedure Connect";
+      while not GNAT.Sockets.Is_Empty (Set) loop
+         GNAT.Sockets.Get (Set, C.Socket);
+
+         if Try_Authenticate (Connect, C) then
+            Ada.Text_IO.Put_Line ("Successful client authenticate TODO");
+            exit;
+         end if;
+      end loop;
+
+      while not GNAT.Sockets.Is_Empty (Set) loop
+         GNAT.Sockets.Get (Set, Temp);
+         GNAT.Sockets.Close_Socket (Temp);
+      end loop;
    end Connect;
 
    procedure Listen
      (C : in out Disconnected_Connection; Address : Server_Address)
    is
+      Set : GNAT.Sockets.Socket_Set_Type := Parse_Address (Connect, Address);
+      Unconnected_Socket : GNAT.Sockets.Socket_Type;
+      Client_Addr        : GNAT.Sockets.Sock_Addr_Type;
    begin
-      raise Program_Error with "Unimplemented procedure Listen";
+      while not GNAT.Sockets.Is_Empty (Set) loop
+         GNAT.Sockets.Get (Set, Unconnected_Socket);
+         GNAT.Sockets.Accept_Socket
+           (Unconnected_Socket, C.Socket, Client_Addr);
+
+         Ada.Text_IO.Put_Line
+           ("Accept connection from client TODO" &
+            GNAT.Sockets.Image (Client_Addr));
+
+         if Try_Authenticate (Listen, C) then
+            Ada.Text_IO.Put_Line ("Authenticate success TODO");
+            exit;
+         end if;
+      end loop;
+
+      while not GNAT.Sockets.Is_Empty (Set) loop
+         GNAT.Sockets.Get (Set, Unconnected_Socket);
+         GNAT.Sockets.Close_Socket (Unconnected_Socket);
+      end loop;
    end Listen;
-   pragma Warnings (On);
 
    procedure Disconnect (C : in out Connected_Connection) is
    begin

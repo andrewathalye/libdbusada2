@@ -11,9 +11,9 @@ package D_Bus.Connection is
    ---------------------
    -- Base Operations --
    ---------------------
-   type Connection is private;
-   --  TODO: A connection object is currently not thread-safe
-   --  TODO limited?
+   type Connection is limited private;
+   --  Represents a D-Bus connection. This object must
+   --  not be copied and TODO is not thread-safe.
 
    function Connected (C : Connection) return Boolean;
 
@@ -52,15 +52,14 @@ package D_Bus.Connection is
    ---------------------
    -- Message Support --
    ---------------------
-   procedure Send
-     (C : aliased Connection; M : D_Bus.Messages.Message)
-   with Pre => Connected (C);
+   procedure Send (C : aliased Connection; M : D_Bus.Messages.Message) with
+     Pre => Connected (C);
    --  Send a message via connection `C`
 
    procedure Receive
-     (C : aliased Connection; M : out D_Bus.Messages.Message)
-   with Pre => Connected (C);
-   --  Receive a message from connection `C`
+     (C : aliased Connection; M : out D_Bus.Messages.Message) with
+     Pre => Connected (C);
+     --  Receive a message from connection `C`
 
    ---------------------------
    -- Connection Management --
@@ -68,25 +67,46 @@ package D_Bus.Connection is
    subtype Server_Address is String with
        Dynamic_Predicate => Is_Valid (Server_Address);
    --  A D-Bus Server Address according to the specification.
+   --  This may specify multiple concrete servers, the below
+   --  subprograms will try them, one by one, and use the first
+   --  valid one.
 
    function Is_Valid (Addr : String) return Boolean;
    --  Validate the format, but not contents, of a server address
 
+   Default_Autolaunch : constant Server_Address;
+   --  A default address that will be used if no specific address
+   --  is specified for `Connect`. This will typically be the
+   --  user’s session bus, if one exists.
+
+   Address_Error : exception;
+   --  An error that occurred while trying to interpret the contents
+   --  of an address. This can occur with a well-formed address containing
+   --  incompatible keys.
+
+   Transport_Error : exception;
+   --  An error that occurred while trying to use (transfer data over)
+   --  a server address. This is only propagated if there are no
+   --  more servers to try, but each occurrence is logged.
+
    procedure Connect
-     (C : in out Disconnected_Connection; Address : Server_Address);
-   --  Where `Address` conforms to the specification
-   --  Return when `C` has connected to `Address`
+     (C       : in out Disconnected_Connection;
+      Address :        Server_Address := Default_Autolaunch);
+   --  Connect `C` to one of the servers listed in `Address`
 
    procedure Listen
      (C : in out Disconnected_Connection; Address : Server_Address);
-   --  Where `Address` conforms to the specification
-   --  Return when a client has connected to `Address`
+   --  Start listening on the first valid server address in `Address`
 
    procedure Disconnect (C : in out Connected_Connection);
    --  Disconnect and destroy data held by `C`
    --  TODO make object controlled, auto disconnect on leave scope
 
+   type Mode_Type is private;
+   --  Implementation detail
 private
+   Default_Autolaunch : constant Server_Address := "autolaunch:";
+
    type Canonical_Alignable_Stream is new Alignable_Stream with record
       Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
@@ -114,4 +134,6 @@ private
       Socket          : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
       Unix_Fd_Support : Boolean                  := False;
    end record;
+
+   type Mode_Type is (Connect, Listen);
 end D_Bus.Connection;

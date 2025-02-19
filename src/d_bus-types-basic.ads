@@ -1,10 +1,11 @@
 pragma Ada_2012;
 
 with Interfaces;
+with Ada.Strings.UTF_Encoding;
+with GNAT.OS_Lib;
 
 with D_Bus.Types.Basic_Generic; use D_Bus.Types.Basic_Generic;
 
-with GNAT.OS_Lib;
 
 package D_Bus.Types.Basic is
    -----------------
@@ -61,8 +62,10 @@ package D_Bus.Types.Basic is
    ------------------
    package Strings is new String_Wrappers
      (Type_Code     => String_CC, Data_Length_Type => Interfaces.Unsigned_32,
-      External_Type => String);
+      External_Type => Ada.Strings.UTF_Encoding.UTF_8_String);
    subtype D_String is Strings.Outer;
+   --  TODO a string must NOT contain NUL and must also be a valid UTF 8 string
+   --  Is it worth it to enforce this? Probably
 
    type U_Object_Path is new String;
    function Validate_Object_Path (X : U_Object_Path) return Boolean;
