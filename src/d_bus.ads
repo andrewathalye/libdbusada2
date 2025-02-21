@@ -1,4 +1,5 @@
 package D_Bus is
+   pragma Pure (D_Bus);
 private
    Protocol_Error : exception;
 

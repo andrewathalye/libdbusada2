@@ -18,6 +18,10 @@ procedure Tests is
 
    Connection : aliased D_Bus.Connection.Connection;
 begin
+   D_Bus.Connection.Connect (Connection, "unix:path=./outsock");
+   D_Bus.Connection.Disconnect (Connection);
+
+   pragma Warnings (Off);
    Put_Line ("Produce Arguments");
    Arr_V.Append (+Byte'(1));
 

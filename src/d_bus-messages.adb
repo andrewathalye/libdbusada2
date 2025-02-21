@@ -21,28 +21,30 @@ package body D_Bus.Messages is
    protected body Global_Serials is
       procedure Next_Serial (S : out Valid_Message_Serial) is
       begin
-         S              := Current_Serial;
+         S := Current_Serial;
          Current_Serial := Current_Serial + 1;
       end Next_Serial;
    end Global_Serials;
 
-   package D_Message_Serials is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
-     (Type_Code => D_Bus.Types.Uint32_CC, Inner => U_Message_Serial);
+   package D_Message_Serials is new
+     D_Bus.Types.Basic_Generic.Discrete_Wrappers
+       (Type_Code => D_Bus.Types.Uint32_CC,
+        Inner     => U_Message_Serial);
    subtype D_Message_Serial is D_Message_Serials.Outer;
 
    -------------------
    -- Message Flags --
    -------------------
-   type Message_Flags_Ersatz is mod 2**8;
+   type Message_Flags_Ersatz is mod 2 ** 8;
    for Message_Flags_Ersatz'Size use 8;
 
-   function To_Ersatz is new Ada.Unchecked_Conversion
-     (Message_Flags, Message_Flags_Ersatz);
-   function To_Object is new Ada.Unchecked_Conversion
-     (Message_Flags_Ersatz, Message_Flags);
+   function To_Ersatz is new
+     Ada.Unchecked_Conversion (Message_Flags, Message_Flags_Ersatz);
+   function To_Object is new
+     Ada.Unchecked_Conversion (Message_Flags_Ersatz, Message_Flags);
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Message_Flags)
    is
       Ersatz : Message_Flags_Ersatz;
@@ -53,8 +55,7 @@ package body D_Bus.Messages is
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Message_Flags)
-   is
+      Item   : Message_Flags) is
    begin
       Message_Flags_Ersatz'Write (Stream, To_Ersatz (Item));
    end Write;
@@ -108,9 +109,11 @@ package body D_Bus.Messages is
    -- Compose_Call --
    ------------------
    function Compose_Call
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name := "";
-      Member : Member_Name; Destination : Bus_Name := "") return Message
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : Interface_Name := "";
+      Member      : Member_Name;
+      Destination : Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_Object_Path;
       use type D_Bus.Types.Basic.D_String;
@@ -125,7 +128,10 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => Method_Call, Flags => Flags, Fields => Fields,
+        (Serial    => <>,
+         M_Type    => Method_Call,
+         Flags     => Flags,
+         Fields    => Fields,
          Arguments => <>);
    end Compose_Call;
 
@@ -133,8 +139,9 @@ package body D_Bus.Messages is
    -- Compose_Return --
    --------------------
    function Compose_Return
-     (Flags       : Message_Flags := Default_Message_Flags; Reply_To : Message;
-      Destination : Bus_Name      := "") return Message
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Reply_To    : Message;
+      Destination : Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
@@ -152,16 +159,21 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => Method_Return, Flags => Flags,
-         Fields => Fields, Arguments => <>);
+        (Serial    => <>,
+         M_Type    => Method_Return,
+         Flags     => Flags,
+         Fields    => Fields,
+         Arguments => <>);
    end Compose_Return;
 
    -------------------
    -- Compose_Error --
    -------------------
    function Compose_Error
-     (Flags    : Message_Flags := Default_Message_Flags; Error : Error_Name;
-      Reply_To : Message; Destination : Bus_Name := "") return Message
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Error       : Error_Name;
+      Reply_To    : Message;
+      Destination : Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
@@ -180,17 +192,21 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => D_Bus.Messages.Error, Flags => Flags,
-         Fields => Fields, Arguments => <>);
+        (Serial    => <>,
+         M_Type    => D_Bus.Messages.Error,
+         Flags     => Flags,
+         Fields    => Fields,
+         Arguments => <>);
    end Compose_Error;
 
    --------------------
    -- Compose_Signal --
    --------------------
    function Compose_Signal
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path   : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name;
-      Member : Member_Name) return Message
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : Interface_Name;
+      Member      : Member_Name) return Message
    is
       use type D_Bus.Types.Basic.D_Object_Path;
       use type D_Bus.Types.Basic.D_String;
@@ -201,7 +217,10 @@ package body D_Bus.Messages is
       Fields.Insert (F_Member, +(+Member));
 
       return
-        (Serial    => <>, M_Type => Signal, Flags => Flags, Fields => Fields,
+        (Serial    => <>,
+         M_Type    => Signal,
+         Flags     => Flags,
+         Fields    => Fields,
          Arguments => <>);
    end Compose_Signal;
 
@@ -209,8 +228,7 @@ package body D_Bus.Messages is
    -- Add_Arguments --
    -------------------
    procedure Add_Arguments
-     (M : out Message; Arguments : D_Bus.Types.Argument_List)
-   is
+     (M : out Message; Arguments : D_Bus.Types.Argument_List) is
    begin
       for A of Arguments loop
          M.Arguments.Append (A);
@@ -265,8 +283,8 @@ package body D_Bus.Messages is
    begin
       return
         Original.Flags.No_Reply_Expected
-        and then Original.Serial =
-          +D_Message_Serial (Reply.Fields (F_Reply_Serial).Get);
+        and then Original.Serial
+                 = +D_Message_Serial (Reply.Fields (F_Reply_Serial).Get);
    exception
       when Constraint_Error =>
          return False;
@@ -317,11 +335,13 @@ package body D_Bus.Messages is
 
    type ME_Table_From_Ada_T is array (System.Bit_Order) of Message_Endianness;
    ME_Table_From_Ada          : constant ME_Table_From_Ada_T := (Big, Little);
-   Default_Message_Endianness : constant Message_Endianness  :=
+   Default_Message_Endianness : constant Message_Endianness :=
      ME_Table_From_Ada (System.Default_Bit_Order);
 
-   package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
-     (Type_Code => D_Bus.Types.Byte_CC, Inner => Field_Type);
+   package D_Field_Types is new
+     D_Bus.Types.Basic_Generic.Discrete_Wrappers
+       (Type_Code => D_Bus.Types.Byte_CC,
+        Inner     => Field_Type);
    subtype D_Field_Type is D_Field_Types.Outer;
 
    type RMH_Padding_NR is null record;
@@ -332,7 +352,7 @@ package body D_Bus.Messages is
        (D_Bus.Types.Byte_CC, D_Bus.Types.Intern ("v"));
 
    type Raw_Message_Header is record
-      Endianness       : Message_Endianness    := Default_Message_Endianness;
+      Endianness       : Message_Endianness := Default_Message_Endianness;
       M_Type           : Message_Type;
       Flags            : Message_Flags;
       Protocol_Version : Interfaces.Unsigned_8 := Default_Protocol_Version;
@@ -341,17 +361,15 @@ package body D_Bus.Messages is
       Fields           : Field_Dict;
       Padding          : RMH_Padding.Padded_Type;
    end record
-   with
-      Read => Read_RMH;
+   with Read => Read_RMH;
 
    procedure Read_RMH
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Raw_Message_Header);
    --  Custom read procedure that checks endianness and protocol version
 
-
    procedure Read_RMH
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Raw_Message_Header)
    is
       use type Interfaces.Unsigned_8;
@@ -375,7 +393,7 @@ package body D_Bus.Messages is
    end Read_RMH;
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Message)
    is
       use D_Bus.Types.Containers;
@@ -388,10 +406,10 @@ package body D_Bus.Messages is
       use type Interfaces.Unsigned_8;
       use type Interfaces.Unsigned_32;
 
-      function Field_From_Byte is new Ada.Unchecked_Conversion
-        (Interfaces.Unsigned_8, Field_Type);
+      function Field_From_Byte is new
+        Ada.Unchecked_Conversion (Interfaces.Unsigned_8, Field_Type);
 
-      RMH        : Raw_Message_Header;
+      RMH : Raw_Message_Header;
    begin
       --  Read raw header
       Raw_Message_Header'Read (Stream, RMH);
@@ -400,7 +418,7 @@ package body D_Bus.Messages is
 
       Item := (Serial => Valid_Message_Serial'(+RMH.Serial), others => <>);
       Item.M_Type := RMH.M_Type;
-      Item.Flags  := RMH.Flags;
+      Item.Flags := RMH.Flags;
 
       --  When we read the fields back we can only get bytes :(
       --  There is no way to automatically determine that the actual type
@@ -415,14 +433,18 @@ package body D_Bus.Messages is
       case RMH.M_Type is
          when Invalid =>
             raise Protocol_Error;
+
          when Method_Call =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
+
          when Method_Return =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
+
          when Error =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Error_Name));
+
          when Signal =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Interface));
@@ -461,8 +483,8 @@ package body D_Bus.Messages is
       S   : Valid_Message_Serial;
    begin
       --  Prepare header
-      RMH.M_Type      := Item.M_Type;
-      RMH.Flags       := Item.Flags;
+      RMH.M_Type := Item.M_Type;
+      RMH.Flags := Item.Flags;
       RMH.Body_Length :=
         +Interfaces.Unsigned_32 (D_Bus.Types.Size (Item.Arguments));
       Global_Serials.Next_Serial (S);

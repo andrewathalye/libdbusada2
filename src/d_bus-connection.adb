@@ -3,10 +3,19 @@ pragma Ada_2012;
 with Ada.IO_Exceptions;
 with Ada.Tags;
 with Ada.Text_IO;
+with Ada.Real_Time;
+
+with D_Bus.Connection.Parse_Address;
+with D_Bus.Connection.Try_Authenticate;
 
 with GNAT.Regpat;
 
 package body D_Bus.Connection is
+   ---------------
+   -- Encodings --
+   ---------------
+   package body Encodings is separate;
+
    ---------------
    -- Connected --
    ---------------
@@ -112,25 +121,31 @@ package body D_Bus.Connection is
 
    function Is_Valid (Addr : String) return Boolean is
    begin
+      return True;
+      pragma Warnings (Off);
+      --  TODO crashing here
       return GNAT.Regpat.Match (Server_Regpat, Addr);
+      pragma Warnings (On);
    end Is_Valid;
 
    procedure Connect
      (C       : in out Disconnected_Connection;
       Address :        Server_Address := Default_Autolaunch)
    is
-      Set  : GNAT.Sockets.Socket_Set_Type := Parse_Address (Connect, Address);
+      Set  : GNAT.Sockets.Socket_Set_Type :=
+        D_Bus.Connection.Parse_Address (Connect, Address);
       Temp : GNAT.Sockets.Socket_Type;
    begin
       while not GNAT.Sockets.Is_Empty (Set) loop
          GNAT.Sockets.Get (Set, C.Socket);
 
-         if Try_Authenticate (Connect, C) then
+         if D_Bus.Connection.Try_Authenticate (Connect, C) then
             Ada.Text_IO.Put_Line ("Successful client authenticate TODO");
             exit;
          end if;
       end loop;
 
+      --  Close all unneeded sockets
       while not GNAT.Sockets.Is_Empty (Set) loop
          GNAT.Sockets.Get (Set, Temp);
          GNAT.Sockets.Close_Socket (Temp);
@@ -140,10 +155,12 @@ package body D_Bus.Connection is
    procedure Listen
      (C : in out Disconnected_Connection; Address : Server_Address)
    is
-      Set : GNAT.Sockets.Socket_Set_Type := Parse_Address (Connect, Address);
+      Set                : GNAT.Sockets.Socket_Set_Type :=
+        D_Bus.Connection.Parse_Address (Connect, Address);
       Unconnected_Socket : GNAT.Sockets.Socket_Type;
       Client_Addr        : GNAT.Sockets.Sock_Addr_Type;
    begin
+      --  TODO we need to redo this
       while not GNAT.Sockets.Is_Empty (Set) loop
          GNAT.Sockets.Get (Set, Unconnected_Socket);
          GNAT.Sockets.Accept_Socket
@@ -153,12 +170,15 @@ package body D_Bus.Connection is
            ("Accept connection from client TODO" &
             GNAT.Sockets.Image (Client_Addr));
 
-         if Try_Authenticate (Listen, C) then
+         if D_Bus.Connection.Try_Authenticate (Listen, C) then
             Ada.Text_IO.Put_Line ("Authenticate success TODO");
             exit;
+         else
+            GNAT.Sockets.Close_Socket (C.Socket);
          end if;
       end loop;
 
+      --  Close all unneeded sockets
       while not GNAT.Sockets.Is_Empty (Set) loop
          GNAT.Sockets.Get (Set, Unconnected_Socket);
          GNAT.Sockets.Close_Socket (Unconnected_Socket);
@@ -170,5 +190,22 @@ package body D_Bus.Connection is
       GNAT.Sockets.Close_Socket (C.Socket);
       C.Socket := GNAT.Sockets.No_Socket;
    end Disconnect;
+begin
+   --  Seed random number generator
+   declare
+      use Ada.Real_Time;
+      Seconds : Seconds_Count;
+      TS      : Time_Span;
 
+      type Unsigned_Seconds is mod 2**Seconds_Count'Size;
+      type Unsigned_Integer is mod 2**Integer'Size / 2;
+      Seed : Integer;
+   begin
+      Split (Clock, Seconds, TS);
+      Seed :=
+        Integer
+          (Unsigned_Seconds (Seconds) and
+           Unsigned_Seconds (Unsigned_Integer'Last));
+      Filename_Random.Reset (Generator, Seed);
+   end;
 end D_Bus.Connection;

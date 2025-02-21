@@ -1,112 +1,196 @@
 pragma Ada_2012;
 
+with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Directories;
 with Ada.Environment_Variables;
 with Ada.Exceptions;
 with Ada.Strings.Fixed;
+with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 
+with Ada.Unchecked_Conversion;
 with GNAT.OS_Lib;
 
 with GNATCOLL.OS.FS;
 with GNATCOLL.OS.Process;
 
-with D_Bus.Standard_Interfaces;
+with D_Bus.Platform;
 
-pragma Style_Checks (Off);
 function D_Bus.Connection.Parse_Address
-     (Mode : Mode_Type; Addr : Server_Address) return GNAT.Sockets.Socket_Set_Type
+  (Mode : Mode_Type; Addr : Server_Address) return GNAT.Sockets.Socket_Set_Type
 is
    use GNAT.Sockets;
 
-   type Server_Transport is (Unix, Launchd, Systemd, Tcp, Unixexec, Autolaunch);
+   type Server_Transport is
+     (Unix, Launchd, Systemd, Tcp, Unixexec, Autolaunch);
    --  These are the server transport protocols that we support.
    --  Nonce-Tcp is not supported.
 
-   type Nullable_Socket_Type (Has_Socket : Boolean) is record
-      case Has_Socket is
-         when True => 
-            Socket : Socket_Type;
-         when False =>
-            null;
-      end case;
-   end record;
-
-   --  TODO more checks, check whether the address exists if unix
-   function Try_Address
-     (Addr : String; Last : out Positive) return Nullable_Socket_Type;
-   function Try_Address
-     (Addr : String; Last : out Positive) return Nullable_Socket_Type
-   is
+   --  TODO handle connect failure
+   function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type;
+   function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type is
       use Ada.Strings.Unbounded;
+      use D_Bus.Connection.Encodings;
+
+      -------------------
+      -- Early Renames --
+      -------------------
+      Colon : constant Positive := Ada.Strings.Fixed.Index (Addr, ":");
+      Transport_Name  : String renames Addr (Addr'First .. Colon - 1);
+      Transport_Props : String renames Addr (Colon + 1 .. Addr'Last);
+
+      function Key_Value_Start (Key : String) return Natural;
+      --  Returns the index into Transport_Props at which the key data starts,
+      --  or 0 if the key was not found
+
+      function Key_Value_Start (Key : String) return Natural is
+         Key_Name_Start : Positive := Transport_Props'First;
+         Equal_Pos   : Natural;
+      begin
+         Iterate_Key_Names :
+         while Key_Name_Start < Transport_Props'Last loop
+            --  Search for the end of the current key
+            Equal_Pos :=
+              Ada.Strings.Fixed.Index
+                (Source => Transport_Props, Pattern => "=",
+                 From   => Key_Name_Start);
+
+            --  For a value to exist, '=' must be present
+            if Equal_Pos = 0 then
+               exit Iterate_Key_Names;
+            elsif Equal_Pos = Transport_Props'Last then
+               raise Address_Error with "Key with no value found";
+            end if;
+
+            --  Check against search query
+            --  Note we can’t pre-encode the key because
+            --  of 'optionally-escaped bytes'
+            if Decode_Server_Address
+                (Transport_Props (Key_Name_Start .. Equal_Pos - 1)) =
+              Key
+            then
+               return Equal_Pos + 1;
+            end if;
+
+            --  Otherwise update Key_Name_Start
+            --  Try to find the next ','
+            if Ada.Strings.Fixed.Index (Transport_Props, ",", Equal_Pos) = 0
+            then
+               exit Iterate_Key_Names;
+            else
+               Key_Name_Start :=
+                 Ada.Strings.Fixed.Index (Transport_Props, ",", Equal_Pos) +
+                 1;
+            end if;
+         end loop Iterate_Key_Names;
+
+         --  Key not found
+         return 0;
+      end Key_Value_Start;
 
       function Get_Value (Key : String) return String;
-      function Has_Key (Key : String) return Boolean;
+      function Get_Value (Key : String) return String is
+         V_Start : constant Positive := Key_Value_Start (Key);
+         V_End   : Natural;
+      begin
+         --  Search for the end of the current value
+         --  First try searching for the next-key-in-list indicator ','
+         V_End :=
+           Ada.Strings.Fixed.Index
+             (Source => Transport_Props, Pattern => ",", From => V_Start);
 
-      Transport_Name : constant String := Addr (Addr'First .. Ada.Strings.Fixed.Index (Addr, ":"));
-      Transport : Server_Transport;
-      Socket : Socket_Type;
+         if V_End = 0 then
+            V_End := Transport_Props'Last;
+         end if;
+
+         return Decode_Server_Address (Transport_Props (V_Start .. V_End));
+      end Get_Value;
+
+      function Has_Key (Key : String) return Boolean is
+        (Key_Value_Start (Key) /= 0);
+      --  Return True if Transport_Props contains the given key,
+      --  and False if it is not present.
+
+      ----------
+      -- Data --
+      ----------
+      Transport       : Server_Transport;
+      Family          : Family_Type;
+      Address         : Sock_Addr_Type;
+      --  Note Compiler will warn if it is possible for these to be
+      --  uninitialised.
    begin
-      Last := Ada.Strings.Fixed.Index (Addr, ";") + 1;
-
       --  Try to parse the transport
       begin
          Transport := Server_Transport'Value (Transport_Name);
       exception
          when Constraint_Error =>
-            raise Transport_Error with "Transport '" & Transport_Name & "' is not recognised.";
+            raise Transport_Error
+              with "Transport '" & Transport_Name & "' is not recognised.";
       end;
 
+      --  Create a socket based upon the transport method
       case Transport is
          when Unix =>
+            Family := Family_Unix;
+
             if Has_Key ("abstract") then
                --  This is valid syntax, just not supported
-               raise Transport_Error with "Transport 'Unix' does not support abstract sockets.";
+               raise Transport_Error
+                 with "Transport 'Unix' does not support abstract sockets.";
             end if;
 
-            case Mode_Type is
+            case Mode is
                when Connect =>
                   if not Has_Key ("path") then
-                     raise Address_Error with "Connectable transport 'unix' requires option 'path'.";
+                     raise Address_Error
+                       with "Connectable transport 'unix' requires 'path'.";
                   end if;
 
-                  GNAT.Sockets.Create_Socket (Socket, Family_Unix); 
                   Address := Unix_Socket_Address (Get_Value ("path"));
-                  --  TODO timeout
-                  GNAT.Sockets.Connect_Socket (Socket, Address);
                when Listen =>
-                  declare
-                     Address : Sock_Addr_Type;
-                  begin
-                     if Has_Key ("path") then
-                        Address := Unix_Socket_Address (Get_Value ("path"));
-                     elsif Has_Key ("dir") then
-                        Address := Unix_Socket_Address (Get_Value ("dir") & "/" & Random_Name);
-                     elsif Has_Key ("tmpdir") then
-                        Address := Unix_Socket_Address (Get_Value ("tmpdir") & "/" & Random_Name);
-                     elsif Has_Key ("runtime") then
-                        if Get_Value ("runtime") /= "yes" then
-                           raise Address_Error with "Listenable transport 'unix' takes option 'runtime=yes'";
-                        end if;
-
-                        if not Ada.Environment_Variables.Exists ("XDG_RUNTIME_DIR") then
-                           raise Transport_Error with "XDG_RUNTIME_DIR not defined and 'runtime=yes' requested.";
-                        end if;
-
-                        Address := Unix_Socket_Address (Ada.Environment_Variables.Value ("XDG_RUNTIME_DIR") & "/" & Random_Name);
-                     else
-                        raise Address_Error with "Listenable transport 'unix' requires options";
+                  if Has_Key ("path") then
+                     Address := Unix_Socket_Address (Get_Value ("path"));
+                  elsif Has_Key ("dir") then
+                     Address :=
+                       Unix_Socket_Address
+                         (Get_Value ("dir") & "/" & Random_Filename);
+                  elsif Has_Key ("tmpdir") then
+                     Address :=
+                       Unix_Socket_Address
+                         (Get_Value ("tmpdir") & "/" & Random_Filename);
+                  elsif Has_Key ("runtime") then
+                     if Get_Value ("runtime") /= "yes" then
+                        raise Address_Error
+                          with "Listenable transport 'unix' takes" &
+                          " 'runtime=yes'";
                      end if;
 
-                     GNAT.Sockets.Create_Socket (Socket, Family_Unix);
-                     GNAT.Sockets.Listen_Socket;
-                     GNAT.Sockets.Bind_Socket (Socket, Address);
-                  end;
+                     if not Ada.Environment_Variables.Exists
+                         ("XDG_RUNTIME_DIR")
+                     then
+                        raise Transport_Error
+                          with "XDG_RUNTIME_DIR not defined and" &
+                          " 'runtime=yes' requested.";
+                     end if;
+
+                     Address :=
+                       Unix_Socket_Address
+                         (Ada.Environment_Variables.Value ("XDG_RUNTIME_DIR") &
+                          "/" & Random_Filename);
+                  else
+                     raise Address_Error
+                       with "Listenable transport 'unix' requires options";
+                  end if;
             end case;
+
          when Launchd =>
+            Family := Family_Unix;
+
             if not Has_Key ("env") then
-               raise Address_Error with "Transport 'launchd' requires option 'env'.";
+               raise Address_Error
+                 with "Transport 'launchd' requires option 'env'.";
             end if;
 
             --  Note:
@@ -116,71 +200,71 @@ is
             declare
                Env : constant String := Get_Value ("env");
             begin
-               case Mode_Type is
+               case Mode is
                   when Connect =>
                      --  Retrieve Socket using "launchctl getenv <...>"
                      declare
+                        Result : Unbounded_String;
+                        Args   : GNATCOLL.OS.Process.Argument_List;
                         Status : Integer;
-                        Read_Pipe, Write_Pipe : GNATCOLL.OS.FS.File_Descriptor;
-                        Result : Socket_Addr_Type;
                      begin
-                        GNATCOLL.OS.FS.Open_Pipe (Read_Pipe, Write_Pipe);
-
-                        --  Make sure write pipe propagates
-                        GNATCOLL.OS.FS.Set_Close_On_Exec (Write_Pipe, False);
-
                         --  Blocking `Run` until error or completion
-                        Status := GNATCOLL.OS.Process.Run
-                          (Args => ("launchctl", "getenv", Env),
-                           Stdout => Write_Pipe);
+                        Args.Append ("launchctl");
+                        Args.Append ("getenv");
+                        Args.Append ("Env");
 
-                        --  TODO is this always 0 on success?
+                        Result :=
+                          GNATCOLL.OS.Process.Run
+                            (Args => Args, Status => Status);
+
+                        --  Check command success
                         if Status /= 0 then
-                           GNATCOLL.OS.FS.Close (Read_Pipe);
-                           GNATCOLL.OS.FS.Close (Write_Pipe);
-                           raise Transport_Error with "Connectable transport 'launchd' failed to get socket path.";
+                           raise Transport_Error
+                             with "Connectable transport 'launchd' failed" &
+                             " to get socket path.";
                         end if;
 
-                        --  Fetch and stash result
-                        --  Note: This can FAIL if the result is too large
-                        --  to store on the stack. This isn’t a security
-                        --  risk, is it? TODO
-                        Result := Unix_Socket_Address (GNATCOLL.OS.FS.Read (Read_Pipe));
-
-                        --  Clean up
-                        GNATCOLL.OS.FS.Close (Read_Pipe);
-                        GNATCOLL.OS.FS.Close (Write_Pipe);
-
-                        --  Remove white space and make socket
-                        GNAT.Sockets.Create_Socket (Socket, Family_Unix);
-                        GNAT.Sockets.Connect_Socket (Socket, Unix_Socket_Address (Ada.Strings.Fixed.Trim (Result)));
+                        --  TODO do we have to worry about newlines’
+                        Address := Unix_Socket_Address (To_String (Result));
                      end;
+
                   when Listen =>
                      if not Ada.Environment_Variables.Exists (Env) then
-                        raise Transport_Error with "Listenable transport 'launchd' must be launched via launchd.";
+                        raise Transport_Error
+                          with "Listenable transport 'launchd' must be" &
+                          " launched via launchd.";
                      end if;
 
-                     GNAT.Sockets.Create_Socket (Socket, Family_Unix);
-                     GNAT.Sockets.Listen_Socket (Socket);
-                     GNAT.Sockets.Bind_Socket (Socket, Unix_Socket_Address (Ada.Environment_Variables.Value (Env)));
+                     Address :=
+                       Unix_Socket_Address
+                         (Ada.Environment_Variables.Value (Env));
                end case;
             end;
+
          when Systemd =>
+            Family := Family_Unix;
+
             case Mode is
                when Connect =>
-                  raise Transport_Error with "Transport 'systemd' is not connectable.";
+                  raise Transport_Error
+                    with "Transport 'systemd' is not connectable.";
+
                when Listen =>
                   if not Ada.Environment_Variables.Exists ("LISTEN_FDS") then
-                     raise Transport_Error with "Listenable transport 'systemd' must be launched via systemd.";
+                     raise Transport_Error
+                       with "Listenable transport 'systemd' must be" &
+                       " launched via systemd.";
                   end if;
 
                   if Ada.Environment_Variables.Value ("LISTEN_FDS") /= "1" then
-                     raise Transport_Error with "Listenable transport 'systemd' requires one fd.";
+                     raise Transport_Error
+                       with "Listenable transport 'systemd' requires one fd.";
                   end if;
 
                   --  The first FD systemd uses is '3'
-                  Socket := GNAT.Sockets.To_Ada (3);
+                  return GNAT.Sockets.To_Ada (3);
             end case;
+
          when Tcp =>
             if not Has_Key ("host") then
                raise Address_Error with "Transport 'tcp' requires 'host'";
@@ -192,62 +276,72 @@ is
 
             if Has_Key ("family") then
                if Get_Value ("family") = "ipv4" then
-                  GNAT.Sockets.Create_Socket (Socket, Family_Inet);
+                  Family := Family_Inet;
                elsif Get_Value ("family") = "ipv6" then
-                  GNAT.Sockets.Create_Socket (Socket, Family_Inet6);
+                  Family := Family_Inet6;
                else
-                  raise Address_Error with "Transport 'tcp' does not accept the specified 'family'";
+                  raise Address_Error
+                    with "Transport 'tcp' does not accept specified 'family'";
                end if;
             else
                --  One last attempt to identify IPv6 addresses
                if GNAT.Sockets.Is_IPv6_Address (Get_Value ("host")) then
-                  GNAT.Sockets.Create_Socket (Socket, Family_Inet6);
+                  Family := Family_Inet6;
                else
                   --  No family specified, IPv4 will have to do
-                  GNAT.Sockets.Create_Socket (Socket, Family_Inet);
+                  Family := Family_Inet;
                end if;
             end if;
 
             --  Connect / Listen / Accept
+            --  TODO see if this works with '*' as per spec
             declare
-               Host : constant String := Get_Value ("host");
-               Port : constant Port_Type := Port_Type'Value (Get_Value ("port"));
+               Host : constant String    := Get_Value ("host");
+               Port : constant Port_Type :=
+                 Port_Type'Value (Get_Value ("port"));
             begin
                case Mode is
                   when Connect =>
-                     GNAT.Sockets.Connect_Socket
-                       (Socket => Socket,
-                        Server => GNAT.Sockets.Network_Socket_Address
-                          (Addr => GNAT.Sockets.Inet_Addr (Host),
-                           Port => Port));
-                  when Listen =>   
-                     GNAT.Sockets.Listen_Socket (Socket);
-
+                     Address :=
+                       GNAT.Sockets.Network_Socket_Address
+                         (Addr => GNAT.Sockets.Inet_Addr (Host), Port => Port);
+                  when Listen =>
                      --  Optionally use bind address for listener
-                     GNAT.Sockets.Bind_Socket
-                       (Socket => Socket,
-                        Address => GNAT.Sockets.Network_Socket_Address
-                          (Addr => GNAT.Sockets.Inet_Addr
-                             ((if Has_Key ("bind") then Get_Value ("bind") else Host)),
-                           Port => Port));
+                     Address :=
+                       GNAT.Sockets.Network_Socket_Address
+                         (Addr =>
+                            GNAT.Sockets.Inet_Addr
+                              ((if Has_Key ("bind") then Get_Value ("bind")
+                                else Host)),
+                          Port => Port);
                end case;
             end;
+
          when Unixexec =>
+            Family := Family_Unix;
+
             case Mode is
                when Connect =>
                   if not Has_Key ("path") then
-                     raise Address_Error with "Connectable transport 'unixexec' requires 'path'";
+                     raise Address_Error
+                       with "Connectable transport 'unixexec' requires 'path'";
                   end if;
 
                   if Has_Key ("argv0") then
-                     raise Transport_Error with "Connectable transport 'unixexec' does not support 'argv0'";
+                     raise Transport_Error
+                       with "Connectable transport 'unixexec' does not" &
+                       " support overriding 'argv0'";
                   end if;
 
                   --  Create sockets and spawn subprocess
                   declare
                      Client, Server : Socket_Type;
-                     Arguments : GNATCOLL.OS.Process.Argument_List;
+                     Discard        : GNATCOLL.OS.Process.Process_Handle;
+                     Arguments      : GNATCOLL.OS.Process.Argument_List;
                      Argument_Index : Positive := 1;
+
+                     function Convert is new Ada.Unchecked_Conversion
+                       (Integer, GNATCOLL.OS.FS.File_Descriptor);
                   begin
                      Create_Socket_Pair (Client, Server, Family_Unix);
 
@@ -256,7 +350,11 @@ is
                      Add_Arguments :
                      loop
                         declare
-                           Argument_Name : constant String := "argv" & Ada.Strings.Fixed.Trim (Argument_Index'Image);
+                           Argument_Name : constant String :=
+                             "argv" &
+                             Ada.Strings.Fixed.Trim
+                               (Source => Argument_Index'Image,
+                                Side   => Ada.Strings.Left);
                         begin
                            if not Has_Key (Argument_Name) then
                               exit Add_Arguments;
@@ -268,56 +366,68 @@ is
                      end loop Add_Arguments;
 
                      --  Start process
-                     GNATCOLL.OS.Process.Start
-                       (Args => Arguments,
-                        Stdin => Convert (GNAT.Sockets.To_C (Server)),
-                        Stdout => Convert (GNAT.Sockets.To_C (Server)));
+                     Discard :=
+                       GNATCOLL.OS.Process.Start
+                         (Args   => Arguments,
+                          Stdin  => Convert (GNAT.Sockets.To_C (Server)),
+                          Stdout => Convert (GNAT.Sockets.To_C (Server)));
 
-                     Socket := Client;
+                     return Client;
                   end;
+
                when Listen =>
-                  raise Address_Error with "Transport 'unixexec' not listenable";
+                  raise Address_Error
+                    with "Transport 'unixexec' not listenable";
             end case;
+
          when Autolaunch =>
             declare
-               use Ada.Strings.Unbounded.Unbounded_String;
                Info_File : Unbounded_String;
             begin
                --  Try using the environment variable DBUS_SESSION_BUS_ADDRESS
-               if Ada.Environment_Variables.Exists ("DBUS_SESSION_BUS_ADDRESS") then
-                  declare
-                     Discard : Natural;
-                  begin
-                     return Try_Address
-                       (Ada.Environment_Variables.Value ("DBUS_SESSION_BUS_ADDRESS"),
-                        Discard);
-                  end;
-                  goto Autolaunch_Complete;
+               if Ada.Environment_Variables.Exists ("DBUS_SESSION_BUS_ADDRESS")
+               then
+                  return
+                    Try_Address
+                      (Ada.Environment_Variables.Value
+                         ("DBUS_SESSION_BUS_ADDRESS"));
                end if;
 
-               --  If it doesn’t exist, we have to load instance data from
-               --  a file in the home directory.
+               --  If it doesn't exist, load from session file
+               --  in home directory.
 
                --  Pick a directory to store instance info
                if Ada.Environment_Variables.Exists ("HOME") then
-                  Info_File := To_Unbounded (Ada.Environment_Variables.Value ("HOME"));
+                  Info_File :=
+                    To_Unbounded_String
+                      (Ada.Environment_Variables.Value ("HOME"));
                elsif Ada.Environment_Variables.Exists ("LOCALAPPDATA") then
-                  Info_File := To_Unbounded (Ada.Environment_Variables.Value ("LOCALAPPDATA"));
+                  Info_File :=
+                    To_Unbounded_String
+                      (Ada.Environment_Variables.Value ("LOCALAPPDATA"));
                else
-                  raise Transport_Error with "Transport 'autolaunch' could not locate instance info";
+                  raise Transport_Error
+                    with "Transport 'autolaunch' could not" &
+                    " locate instance info";
                end if;
 
                Append (Info_File, "/.dbus/session-bus/");
-               Append (Info_File, D_Bus.Standard_Interfaces.org_freedesktop_DBus_Peer.GetMachineId);
+               Append (Info_File, D_Bus.Platform.Get_Machine_ID);
 
                --  Append display name if we can locate it
+               --  TODO move elsewhere?
                if Ada.Environment_Variables.Exists ("DISPLAY") then
                   Append (Info_File, "-");
                   declare
-                     Full_Display : constant String := Ada.Environment_Variables.Value ("DISPLAY");
-                     Colon : constant Natural := Ada.Strings.Fixed.Index (Full_Display, ":");
-                     Cut_Display : String renames Full_Display (Colon + 1 .. Full_Display'Last);
-                     Dot : Natural := Ada.Strings.Fixed.Index (Cut_Display, ".");
+                     Full_Display : constant String  :=
+                       Ada.Environment_Variables.Value ("DISPLAY");
+                     Colon        : constant Natural :=
+                       Ada.Strings.Fixed.Index (Full_Display, ":");
+                     Cut_Display  :
+                       String renames
+                       Full_Display (Colon + 1 .. Full_Display'Last);
+                     Dot          : Natural          :=
+                       Ada.Strings.Fixed.Index (Cut_Display, ".");
                   begin
                      if Dot = 0 then
                         Dot := Cut_Display'Last + 1;
@@ -325,102 +435,214 @@ is
                      Append (Info_File, Cut_Display (1 .. Dot - 1));
                   end;
                end if;
-               --  Note: No error if we can’t, just means X11 isn’t
-               --  running and this will be a user-wide address rather
-               --  than session-wide.
+               --  Note: No error if we can't determine display, it just
+               --  means this will be a user-wide address.
 
-               Ada.Text_IO.Put_Line ("TODO use info file " & To_String (Info_File));
+               Ada.Text_IO.Put_Line
+                 ("TODO debug use info file " & To_String (Info_File));
 
                --  Check whether the file and/or directory exist
                if not Ada.Directories.Exists (To_String (Info_File)) then
                   case Mode is
                      when Connect =>
-                        raise Transport_Error with "Connectable transport 'autolaunch' could not locate instance info";
+                        raise Transport_Error
+                          with "Connectable transport 'autolaunch' could not" &
+                          " locate instance info";
+
                      when Listen =>
-                        Ada.Directories.Create_Directory (Ada.Directories.Containing_Directory (To_String (Info_File)));
+                        Ada.Directories.Create_Directory
+                          (Ada.Directories.Containing_Directory
+                             (To_String (Info_File)));
                   end case;
                end if;
 
                case Mode is
                   when Connect =>
-                     <<Reread_Info_File>>
                      declare
-                        Declarations : constant Declaration_List := Read_Info_File (Info_File);
+                        package Declaration_Maps is new Ada.Containers
+                          .Indefinite_Hashed_Maps
+                          (String, String, Ada.Strings.Hash, "=");
+
+                        function Read_Info_File
+                          (Path : String) return Declaration_Maps.Map;
+                        function Read_Info_File
+                          (Path : String) return Declaration_Maps.Map
+                        is
+                           use Ada.Text_IO;
+
+                           File   : File_Type;
+                           Result : Declaration_Maps.Map;
+                        begin
+                           Open (File, In_File, Path);
+
+                           while not End_Of_File (File) loop
+                              declare
+                                 Line : constant String := Get_Line (File);
+                                 Key_Name_End : Natural;
+                              begin
+                                 if Line (Line'First) /= '#' then
+                                    Key_Name_End :=
+                                      Ada.Strings.Fixed.Index (Line, "=");
+
+                                    --  Valid placement check
+                                    if Key_Name_End = 0 or
+                                      Key_Name_End = Line'Last
+                                    then
+                                       pragma Style_Checks ("-M");
+                                       raise Transport_Error
+                                         with "Connectable transport 'autolaunch': unterminated session file line";
+                                       pragma Style_Checks (On);
+                                    end if;
+
+                                    --  Insert key and value
+                                    --  No preprocessing is recommended in the
+                                    --  specification.
+                                    Result.Insert
+                                      (Key      =>
+                                         Line (Line'First .. Key_Name_End - 1),
+                                       New_Item =>
+                                         Line (Key_Name_End + 1 .. Line'Last));
+                                 end if;
+                              end;
+                           end loop;
+
+                           Close (File);
+                           return Result;
+                        end Read_Info_File;
+
+                        Declarations : constant Declaration_Maps.Map :=
+                          Read_Info_File (To_String (Info_File));
                      begin
-                        if not Declarations.Contains ("DBUS_SESSION_BUS_ADDRESS") then
-                           raise Transport_Error with "TODO no address in file";
+                        if not Declarations.Contains
+                            ("DBUS_SESSION_BUS_ADDRESS") or
+                          not Declarations.Contains ("DBUS_SESSION_BUS_PID")
+                        then
+                           raise Transport_Error
+                             with "Connectable transport 'autolaunch'" &
+                             " lacking required variables in session file";
                         end if;
 
                         --  Relaunch if process not running
-                        --  TODO can we do better?
-                        if not Declarations.Contains ("DBUS_SESSION_BUS_PID") then
-                           raise Transport_Error with "TODO no pid in file";
-                        elsif not Is_Running (Declarations.Get ("DBUS_SESSION_BUS_PID")) then
-                           Ada.Text_IO.Put_Line ("Session bus not running, restart TODO");
-                           GNATCOLL.OS.Process.Run (("dbus_launch"));
-                           goto Reread_Info_File;
+                        if not D_Bus.Platform.Is_Running
+                            (GNATCOLL.OS.Process.Process_Handle'Value
+                               (Declarations.Element ("DBUS_SESSION_BUS_PID")))
+                        then
+                           raise Transport_Error
+                             with "TODO add restart impl when not running";
                         end if;
 
                         --  Create socket
-                        GNAT.Sockets.Create_Socket (Socket, Family_Unix);
-                        GNAT.Sockets.Connect_Socket (Socket, Unix_Socket_Address (Declarations.Get ("DBUS_SESSION_BUS_PID")));
+                        Address :=
+                          Unix_Socket_Address
+                            (Declarations.Element
+                               ("DBUS_SESSION_BUS_ADDRESS"));
                         goto Autolaunch_Complete;
                      end;
+
                   when Listen =>
                      declare
                         use Ada.Text_IO;
-                        File : File_Type;
-                        Socket_Addr : constant String := Ada.Directories.Containing_Directory (To_String (Info_File)) & Random_Name & ".sock";
+                        File        : File_Type;
+                        Socket_Path : constant String :=
+                          Ada.Directories.Containing_Directory
+                            (To_String (Info_File)) &
+                          Random_Filename & ".sock";
+
                      begin
                         --  Create info file
-                        Ada.Text_IO.Create (File, Out_File, To_String (Info_File));
-                        Put_Line (File, "DBUS_SESSION_BUS_ADDRESS=unix:path=" & Encode (Socket_Addr));
-                        Put_Line (File, "DBUS_SESSION_BUS_PID=" & Ada.Strings.Fixed.Trim (GNAT.OS_Lib.Pid_To_Integer (GNAT.Os_Lib.Current_Process_Id)));
+                        Ada.Text_IO.Create
+                          (File, Out_File, To_String (Info_File));
+                        Put_Line
+                          (File,
+                           "DBUS_SESSION_BUS_ADDRESS=unix:path=" &
+                           Encode_Server_Address (Socket_Path));
+                        Put_Line
+                          (File,
+                           "DBUS_SESSION_BUS_PID=" &
+                           Ada.Strings.Fixed.Trim
+                             (Source =>
+                                GNAT.OS_Lib.Pid_To_Integer
+                                  (GNAT.OS_Lib.Current_Process_Id)'
+                                  Image,
+                              Side   => Ada.Strings.Left));
                         Ada.Text_IO.Close (File);
 
                         --  Create socket
-                        GNAT.Sockets.Create_Socket (Socket, Family_Unix);
-                        GNAT.Sockets.Listen_Socket;
-                        GNAT.Sockets.Bind_Socket (Socket, Unix_Socket_Address (Socket_Addr));
+                        --  TODO solve issue if name already exists
+                        --  TODO also clean up after terminate (elsewhere)
+                        Address := Unix_Socket_Address (Socket_Path);
                         goto Autolaunch_Complete;
                      end;
                end case;
 
-               raise Program_Error;
                <<Autolaunch_Complete>>
             end;
       end case;
 
-      return Nullable_Socket_Type'(True, Socket);
+      --  Make a socket and return
+      --  TODO handle connect failure
+      declare
+         Socket : Socket_Type;
+      begin
+         Create_Socket (Socket, Family);
+
+         case Mode is
+            when Connect =>
+               Connect_Socket (Socket, Address);
+            when Listen =>
+               Listen_Socket (Socket);
+               Bind_Socket (Socket, Address);
+         end case;
+
+         return Socket;
+      end;
    exception
+      --  Avoid propagating an exception (is slow)
+      --  Instead print message and return null socket
       when X : Transport_Error =>
          declare
             use Ada.Text_IO;
             use Ada.Exceptions;
          begin
-            Put_Line (Standard_Error, "[D-Bus][Connection] " & Addr & " " & Exception_Message (X));
-            return Nullable_Socket_Type'(False);
+            Put_Line
+              (Standard_Error,
+               "[D-Bus][Connection] " & Addr & " " & Exception_Message (X));
+            return GNAT.Sockets.No_Socket;
          end;
    end Try_Address;
 
-   Address_Count : constant Positive := Ada.Strings.Fixed.Count (Addr, ";") + 1;
-   Index : Positive := Addr'First;
-   Temp : Nullable_Socket_Type;
-   Result : Socket_Set_Type;
+   Group_Start : Positive := Addr'First;
+   Group_End   : Natural;
+   Temp        : GNAT.Sockets.Socket_Type;
+   Result      : Socket_Set_Type;
 begin
-   for I in Result'Range loop
-      Temp := Try_Address (Addr (Index .. Addr'Last), Index);
-      if Temp.Has_Socket then
-         GNAT.Sockets.Set (Result, Temp.Socket);
+   --  Note: a group is at least two characters (protocol name and ':')
+   while Group_Start < Addr'Last loop
+      --  Determine the end of the current group
+      Group_End := Ada.Strings.Fixed.Index (Addr, ";", Group_Start);
+      if Group_End = 0 then
+         Group_End := Addr'Last;
       end if;
+
+      --  Try parsing one group
+      Temp := Try_Address (Addr (Group_Start .. Group_End));
+      if Temp /= GNAT.Sockets.No_Socket then
+         GNAT.Sockets.Set (Result, Temp);
+      end if;
+
+      --  Update the start index
+      Group_Start := Group_End + 1;
    end loop;
 
    --  TODO we need to clean up sockets when done
+   --  not actually here though, in consumer code
 
-   if not GNAT.Sockets.Is_Empty (Result) then
-      return Result;
+   if GNAT.Sockets.Is_Empty (Result) then
+      raise Transport_Error
+        with "The provided address '" & Addr & "' could not be parsed.";
    end if;
 
-   return raise Transport_Error with "No addresses could be used in the specified mode.";
+   return R : Socket_Set_Type do
+      GNAT.Sockets.Copy (Result, R);
+   end return;
 end D_Bus.Connection.Parse_Address;
-pragma Style_Checks (On);

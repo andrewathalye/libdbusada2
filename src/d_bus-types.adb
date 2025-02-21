@@ -12,33 +12,40 @@ package body D_Bus.Types is
    -- Signature Interning --
    -------------------------
    --  TODO implement
-   type Interning_Pool is
-   new System.Storage_Pools.Root_Storage_Pool with null record;
+   type Interning_Pool is new System.Storage_Pools.Root_Storage_Pool
+   with null record;
 
-   overriding procedure Allocate
-     (Pool : in out Interning_Pool; Storage_Address : out System.Address;
-      Size_In_Storage_Elements :        System.Storage_Elements.Storage_Count;
-      Alignment :        System.Storage_Elements.Storage_Count) is null;
+   overriding
+   procedure Allocate
+     (Pool                     : in out Interning_Pool;
+      Storage_Address          : out System.Address;
+      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
+      Alignment                : System.Storage_Elements.Storage_Count)
+   is null;
 
-   overriding procedure Deallocate
-     (Pool : in out Interning_Pool; Storage_Address : System.Address;
-      Size_In_Storage_Elements :        System.Storage_Elements.Storage_Count;
-      Alignment :        System.Storage_Elements.Storage_Count) is null;
+   overriding
+   procedure Deallocate
+     (Pool                     : in out Interning_Pool;
+      Storage_Address          : System.Address;
+      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
+      Alignment                : System.Storage_Elements.Storage_Count)
+   is null;
 
-   overriding function Storage_Size
-     (Pool : Interning_Pool) return System.Storage_Elements.Storage_Count is
-     (0);
+   overriding
+   function Storage_Size
+     (Pool : Interning_Pool) return System.Storage_Elements.Storage_Count
+   is (0);
 
    Interning_Pool_Obj : Interning_Pool;
    pragma Unreferenced (Interning_Pool_Obj);
 
    type Interned_Single_Allocatable is
      not null access constant Single_Signature;
---   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
+   --   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
 
    type Interned_Contents_Allocatable is
      not null access constant Contents_Signature;
---  for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
+   --  for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
 
    function Intern (X : Single_Signature) return Interned_Single_Signature is
    begin
@@ -72,8 +79,7 @@ package body D_Bus.Types is
       function Read_Single_Signature
         (First : Positive; Last : out Positive) return Single_Signature;
       function Read_Single_Signature
-        (First : Positive; Last : out Positive) return Single_Signature
-      is
+        (First : Positive; Last : out Positive) return Single_Signature is
       begin
          if X (First) in Basic_Signature_Element or X (First) = Variant_CC then
             Last := First;
@@ -84,6 +90,7 @@ package body D_Bus.Types is
          for I in First .. X'Last loop
             case X (I) is
                --  Add structs
+
                when Struct_Start_CC =>
                   --  Find terminating ')' or fail
                   declare
@@ -93,8 +100,10 @@ package body D_Bus.Types is
                         case X (J) is
                            when Struct_Start_CC =>
                               Paren_Count := Paren_Count + 1;
+
                            when Struct_End_CC =>
                               Paren_Count := Paren_Count - 1;
+
                            when others =>
                               null;
                         end case;
@@ -108,6 +117,7 @@ package body D_Bus.Types is
                   raise Constraint_Error;
 
                   --  Add arrays and dicts
+
                when Array_CC =>
                   --  Error if remaining length is too short for array
                   if First = X'Last then
@@ -117,6 +127,7 @@ package body D_Bus.Types is
                   --  Check for dict
                   case X (I + 1) is
                      --  Dict
+
                      when Dict_Start_CC =>
                         --  Find terminating '}' or fail
                         declare
@@ -126,8 +137,10 @@ package body D_Bus.Types is
                               case X (J) is
                                  when Dict_Start_CC =>
                                     Bracket_Count := Bracket_Count + 1;
+
                                  when Dict_End_CC =>
                                     Bracket_Count := Bracket_Count - 1;
+
                                  when others =>
                                     null;
                               end case;
@@ -141,12 +154,15 @@ package body D_Bus.Types is
                         end;
 
                         --  Normal Array, checked via recursive call
+
                      when others =>
                         return
-                          Array_CC &
-                          Read_Single_Signature (First => I + 1, Last => Last);
+                          Array_CC
+                          & Read_Single_Signature
+                              (First => I + 1, Last => Last);
                   end case;
                   --  No other valid elements
+
                when others =>
                   raise Constraint_Error;
             end case;
@@ -155,13 +171,13 @@ package body D_Bus.Types is
          return raise Program_Error;
       end Read_Single_Signature;
 
-      package Single_Signature_Vectors is new Ada.Containers.Indefinite_Vectors
-        (Positive, Single_Signature);
+      package Single_Signature_Vectors is new
+        Ada.Containers.Indefinite_Vectors (Positive, Single_Signature);
 
       --  Variables
       Result_Vector : Single_Signature_Vectors.Vector;
       First         : Positive := X'First;
-      Last          : Natural  := 0;
+      Last          : Natural := 0;
    begin
       --  Read all single signatures
       while Last < X'Last loop
@@ -171,13 +187,13 @@ package body D_Bus.Types is
 
       --  Produce and return array
       --  Note: Ada 2022 syntax was the best I could come up with here
-      --  Otherwise we’d break invariants for not null access
+      --  Otherwise weÃ¢ÂÂd break invariants for not null access
       return [for SS of Result_Vector => Intern (SS)];
    end U_Split_Signature;
 
    function Split_Signature
-     (X : Contents_Signature) return Single_Signature_Array is
-     (U_Split_Signature (X));
+     (X : Contents_Signature) return Single_Signature_Array
+   is (U_Split_Signature (X));
 
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean
    is
@@ -187,7 +203,7 @@ package body D_Bus.Types is
          return False;
       end if;
 
-      --  Basic types can’t be longer than 1
+      --  Basic types canÃ¢ÂÂt be longer than 1
       if X (X'First) in Basic_Signature_Element or X (X'First) = Variant_CC
       then
          if X'Length > 1 then
@@ -239,6 +255,7 @@ package body D_Bus.Types is
                when Constraint_Error =>
                   return False;
             end;
+
          when Struct_Start_CC =>
             --  Type must be at least three long and end in ')'
             if X'Length < 3 or X (X'Last) /= Struct_End_CC then
@@ -257,6 +274,7 @@ package body D_Bus.Types is
                when Constraint_Error =>
                   return False;
             end;
+
          when others =>
             return False;
       end case;
@@ -265,8 +283,7 @@ package body D_Bus.Types is
    end Validate_Single_Signature;
 
    function Validate_Contents_Signature
-     (X : U_Contents_Signature) return Boolean
-   is
+     (X : U_Contents_Signature) return Boolean is
    begin
       --  Length check
       if X'Length > 255 then
@@ -336,17 +353,17 @@ package body D_Bus.Types is
       -- Read --
       ----------
       procedure Read
-        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Padded_Type)
       is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-            D_Bus.Connection.As_Alignable_Stream (Stream);
+           D_Bus.Connection.As_Alignable_Stream (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
-           ASA.Read_Count mod
-           Ada.Streams.Stream_Element_Count (Alignment_Bytes);
+           ASA.Read_Count
+           mod Ada.Streams.Stream_Element_Count (Alignment_Bytes);
 
          Discard : Character;
       begin
@@ -369,11 +386,11 @@ package body D_Bus.Types is
          use type Ada.Streams.Stream_Element_Count;
 
          ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-            D_Bus.Connection.As_Alignable_Stream (Stream);
+           D_Bus.Connection.As_Alignable_Stream (Stream);
 
          Remainder : constant Ada.Streams.Stream_Element_Count :=
-           ASA.Write_Count mod
-           Ada.Streams.Stream_Element_Count (Alignment_Bytes);
+           ASA.Write_Count
+           mod Ada.Streams.Stream_Element_Count (Alignment_Bytes);
       begin
          for I in 1 .. Remainder loop
             Character'Write (Stream, ASCII.NUL);

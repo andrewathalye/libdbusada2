@@ -36,9 +36,8 @@ package body D_Bus.Types.Basic_Generic is
       -- Read --
       ----------
       procedure Read
-        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : out Outer)
-      is
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+         Item   : out Outer) is
       begin
          Item.I.Replace_Element (Internal_Type'Input (Stream));
       end Read;
@@ -48,8 +47,7 @@ package body D_Bus.Types.Basic_Generic is
       -----------
       procedure Write
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : Outer)
-      is
+         Item   : Outer) is
       begin
          Internal_Type'Output (Stream, Item.I.Element);
       end Write;

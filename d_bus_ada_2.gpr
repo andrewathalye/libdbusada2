@@ -1,8 +1,22 @@
 with "gnatcoll_core";
 
 library project D_Bus_Ada_2 extends "gpr/shared" is
+   type OS_Type is ("Windows_NT", "Darwin", "Unix");
+   OS : OS_Type := external ("OS", "Unix");
+
+   Source_Dirs := ("src");
+   
+   case OS is
+      when "Windows_NT" =>
+         Source_Dirs := Source_Dirs & "src/windows";
+      when "Darwin" =>
+         Source_Dirs := Source_Dirs & "src/darwin";
+      when "Unix" =>
+         Source_Dirs := Source_Dirs & "src/unix";
+   end case;
+
    for Library_Name use "dbusada2";
-   for Source_Dirs use ("src");
+   for Source_Dirs use Source_Dirs;
    for Object_Dir use "obj/" & Shared.Build_Mode;
    for Library_Dir use "lib/";
    for Library_Kind use "relocatable";
