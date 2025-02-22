@@ -9,9 +9,7 @@ library project D_Bus_Ada_2 extends "gpr/shared" is
    case OS is
       when "Windows_NT" =>
          Source_Dirs := Source_Dirs & "src/windows";
-      when "Darwin" =>
-         Source_Dirs := Source_Dirs & "src/darwin";
-      when "Unix" =>
+      when "Darwin" | "Unix" =>
          Source_Dirs := Source_Dirs & "src/unix";
    end case;
 

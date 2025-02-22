@@ -130,7 +130,7 @@ package body D_Bus.Encodings is
       --  This makes the computations much easier
    begin
       for I in Normalised'Range loop
-         Result (I * 2 .. I * 2 + 1) := To_Hex (Normalised (I));
+         Result (I * 2 - 1 .. I * 2) := To_Hex (Normalised (I));
       end loop;
 
       return Result;
@@ -142,7 +142,7 @@ package body D_Bus.Encodings is
       --  See above (normalise bounds)
    begin
       for I in Result'Range loop
-         Result (I) := From_Hex (Normalised (I * 2 .. I * 2 + 1));
+         Result (I) := From_Hex (Normalised (I * 2 - 1 .. I * 2));
       end loop;
 
       return Result;

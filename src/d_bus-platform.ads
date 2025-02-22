@@ -39,12 +39,16 @@ package D_Bus.Platform is
    --  Returns whether socket `S` supports transferring file descriptors
    --  on the current platform.
 
-   procedure Send_Credentials (S : GNAT.Sockets.Socket_Type);
-   --  Send the current user's credentials over the socket to be checked
-   --  TODO we probably need a way to check if possible
+   Credentials_Error : exception;
+   function Read_Credentials (S : GNAT.Sockets.Socket_Type) return String;
+   --  Return the ID of the user who owns socket `S`.
+   --
+   --  Raise `Credentials_Error` on failure.
 
-   function Check_Credentials
-     (S : GNAT.Sockets.Socket_Type; Creds : String) return Boolean;
-   --  Check that the credentials we received match `Creds`
-   --  TODO not yet sure what it all means
+   procedure Write_Credentials (S : GNAT.Sockets.Socket_Type);
+   --  Send credentials over `S` to be verified by the recipient.
+   --  Additionally sends a null byte.
+   --
+   --  Raise `Credentials_Error` on failure.
+   --  On failure, does not write a null byte.
 end D_Bus.Platform;

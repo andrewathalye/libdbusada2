@@ -18,10 +18,12 @@ abstract project Shared is
       case Build_Mode is
          when "dev" =>
             for Default_Switches ("Ada") use Dev_Switches;
+            for Default_Switches ("C") use ("-g", "-Og");
          when "prod" =>
             for Default_Switches ("Ada") use Prod_Switches;
          when "coverage" =>
             for Default_Switches ("Ada") use Coverage_Switches;
+            for Default_Switches ("C") use ("-g", "-Og");
       end case;
    end Compiler;
 

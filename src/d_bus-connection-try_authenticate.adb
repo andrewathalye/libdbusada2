@@ -109,12 +109,12 @@ is
 
          --  If no " " was detected, there are no parameters
          if Command_End = 0 then
-            Command_End := String_View'Last;
+            Command_End := String_View'Last + 1;
             Msg         := Null_Unbounded_String;
          else
             Msg :=
               To_Unbounded_String
-                (String_View (Command_End .. String_View'Last));
+                (String_View (Command_End + 1 .. String_View'Last));
          end if;
 
          return SASL_Command'Value ("C_" & String_View (1 .. Command_End - 1));
@@ -221,8 +221,8 @@ is
                         case Requested_Method is
                            when External =>
                               --  TODO do something more?
-                              if D_Bus.Platform.Check_Credentials
-                                  (C.Socket, To_String (Initial_Response))
+                              if D_Bus.Platform.Read_Credentials (C.Socket) =
+                                To_String (Initial_Response)
                               then
                                  State := Ok;
                               else
@@ -238,6 +238,8 @@ is
                      exception
                         when Constraint_Error                 =>
                            State := Failure;
+                        when D_Bus.Platform.Credentials_Error =>
+                           null;
                         when D_Bus.Encodings.Invalid_Encoding =>
                            raise Protocol_Error;
                      end;
@@ -288,35 +290,42 @@ is
       loop
          case State is
             when Initial =>
-               Null_Byte (Connect);
+               --  As per specification, try sending credentials
+               --  On fail, send null byte manually
+               begin
+                  D_Bus.Platform.Write_Credentials (C.Socket);
+               exception
+                  when D_Bus.Platform.Credentials_Error =>
+                     Ada.Text_IO.Put_Line ("TODO could not send creds");
+                     Null_Byte (Connect);
+               end;
+
                State := Authenticate;
             when Authenticate =>
                for M in SASL_Method'Range loop
                   case M is
                      when External =>
-                        D_Bus.Platform.Send_Credentials (C.Socket);
-
                         SASL_Send
                           (C_Auth,
-                           External'Image & " " & D_Bus.Platform.Get_User_ID);
-                        goto Check_Result;
+                           External'Image & " " &
+                           To_Hex (D_Bus.Platform.Get_User_ID));
                      when DBus_Cookie_SHA1 =>
                         raise Program_Error with "unimplemented TODO";
                      when Anonymous =>
                         SASL_Send (C_Auth, Anonymous'Image);
-                        goto Check_Result;
                   end case;
 
-                  <<Check_Result>>
                   case SASL_Receive (Buf) is
                      when C_Ok =>
                         State := Ok;
+                        goto Done_Authenticate;
                      when C_Rejected =>
                         null;
                      when others =>
                         raise Protocol_Error;
                   end case;
                end loop;
+               <<Done_Authenticate>>
             when Ok =>
                --  The actual 'Ok' message is checked earlier
                C.UUID := D_Bus.Types.UUID (From_Hex (To_String (Buf)));

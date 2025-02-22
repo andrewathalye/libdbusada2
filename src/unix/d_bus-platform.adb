@@ -91,4 +91,36 @@ package body D_Bus.Platform is
       return
         GNAT.Sockets.Get_Socket_Name (S).Family = GNAT.Sockets.Family_Unix;
    end FD_Transfer_Support;
+
+   function Read_Credentials (S : GNAT.Sockets.Socket_Type) return String
+   is
+      use type Interfaces.C.Strings.chars_ptr;
+
+      function Read_Credentials_C
+        (S : Integer) return Interfaces.C.Strings.chars_ptr
+        with Import => True, Convention => C;
+
+      Ptr : Interfaces.C.Strings.chars_ptr;
+   begin
+      Ptr := Read_Credentials_C (GNAT.Sockets.To_C (S));
+
+      if Ptr = Interfaces.C.Strings.Null_Ptr then
+         raise Credentials_Error;
+      end if;
+
+      return Result : constant String := Interfaces.C.Strings.Value (Ptr) do
+         Interfaces.C.Strings.Free (Ptr);
+      end return;
+   end Read_Credentials;
+
+   procedure Write_Credentials (S : GNAT.Sockets.Socket_Type) is
+      use type Interfaces.C.C_bool;
+
+      function Write_Credentials_C (S : Integer) return Interfaces.C.C_bool
+      with Import => True, Convention => C;
+   begin
+      if not Write_Credentials_C (GNAT.Sockets.To_C (S)) then
+         raise Credentials_Error;
+      end if;
+   end Write_Credentials;
 end D_Bus.Platform;
