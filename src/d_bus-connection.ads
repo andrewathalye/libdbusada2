@@ -51,7 +51,7 @@ package D_Bus.Connection is
 
    function FD_Transfer_Support (C : Connected_Connection) return Boolean;
    --  Check whether `C` supports UNIX File Descriptor transfers.
-   --  This depends on the server, the transport protocol, and the client.
+   --  This requires support at both ends of the connection.
 
    ---------------------
    -- Message Support --
@@ -140,12 +140,6 @@ private
    end record;
 
    type Mode_Type is (Connect, Listen);
-
-   ---------------------------------
-   -- Internal FD Transfer Checks --
-   ---------------------------------
-   function FD_Transfer_Support (S : GNAT.Sockets.Socket_Type) return Boolean;
-   --  Check whether `S` can pass UNIX file descriptors on this platform.
 
    ------------------
    -- Random UUIDs --

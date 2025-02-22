@@ -43,11 +43,12 @@ is
       --------------
       -- Variable --
       --------------
-      Last   : Ada.Streams.Stream_Element_Offset;
+      Last : Ada.Streams.Stream_Element_Offset;
 
       SEA_Buffer :
         Ada.Streams.Stream_Element_Array
-          (1 .. Ada.Streams.Stream_Element_Offset (Buffer'Last));
+          (Ada.Streams.Stream_Element_Offset (Buffer'First) ..
+               Ada.Streams.Stream_Element_Offset (Buffer'Last));
    begin
       Ada.Text_IO.Put_Line (Buffer);
 
@@ -109,10 +110,11 @@ is
          --  If no " " was detected, there are no parameters
          if Command_End = 0 then
             Command_End := String_View'Last;
-            Msg := Null_Unbounded_String;
+            Msg         := Null_Unbounded_String;
          else
-            Msg := To_Unbounded_String
-              (String_View (Command_End .. String_View'Last));
+            Msg :=
+              To_Unbounded_String
+                (String_View (Command_End .. String_View'Last));
          end if;
 
          return SASL_Command'Value ("C_" & String_View (1 .. Command_End - 1));
@@ -124,7 +126,7 @@ is
       use type Ada.Streams.Stream_Element;
       use type Ada.Streams.Stream_Element_Offset;
 
-      NBA : Ada.Streams.Stream_Element_Array := (1 => 0);
+      NBA  : Ada.Streams.Stream_Element_Array := (1 => 0);
       Last : Ada.Streams.Stream_Element_Offset;
    begin
       case Mode is
@@ -139,6 +141,51 @@ is
       end if;
 
    end Null_Byte;
+
+   function Enumerate_Methods return String;
+   function Enumerate_Methods return String is
+      use Ada.Strings.Unbounded;
+
+      Buf : Unbounded_String;
+   begin
+      for M in SASL_Method'Range loop
+         Append (Buf, M'Image);
+
+         if M /= SASL_Method'Last then
+            Append (Buf, ' ');
+         end if;
+      end loop;
+
+      return To_String (Buf);
+   end Enumerate_Methods;
+
+   function Parameter
+     (Buf : Ada.Strings.Unbounded.Unbounded_String; Index : Positive)
+      return String;
+   function Parameter
+     (Buf : Ada.Strings.Unbounded.Unbounded_String; Index : Positive)
+      return String
+   is
+      use Ada.Strings.Unbounded;
+
+      Spaces_Before : constant Natural := Index - 1;
+      Space_Prior   : Natural          := 0;
+      Space_After   : Natural          := 0;
+   begin
+      for I in 1 .. Spaces_Before loop
+         Space_Prior := Space_After;
+         Space_After :=
+           Ada.Strings.Unbounded.Index
+             (Source => Buf, Pattern => " ", From => Space_Prior + 1);
+      end loop;
+
+      if Space_After = 0 then
+         Space_After := Length (Buf) + 1;
+      end if;
+
+      return Slice (Buf, Space_Prior + 1, Space_After - 1);
+   end Parameter;
+   --  TODO check
 
    -----------
    -- Logic --
@@ -173,7 +220,10 @@ is
 
                         case Requested_Method is
                            when External =>
-                              if Check_External_Credentials then
+                              --  TODO do something more?
+                              if D_Bus.Platform.Check_Credentials
+                                  (C.Socket, To_String (Initial_Response))
+                              then
                                  State := Ok;
                               else
                                  State := Failure;
@@ -204,7 +254,7 @@ is
                   when C_Begin =>
                      State := Final;
                   when C_Agree_Unix_Fd =>
-                     if FD_Transfer_Support (C) then
+                     if D_Bus.Platform.FD_Transfer_Support (C.Socket) then
                         SASL_Send (C_Agree_Unix_Fd);
                         C.Unix_Fd_Support := True;
                         State             := Final;
@@ -244,6 +294,8 @@ is
                for M in SASL_Method'Range loop
                   case M is
                      when External =>
+                        D_Bus.Platform.Send_Credentials (C.Socket);
+
                         SASL_Send
                           (C_Auth,
                            External'Image & " " & D_Bus.Platform.Get_User_ID);
@@ -270,7 +322,7 @@ is
                C.UUID := D_Bus.Types.UUID (From_Hex (To_String (Buf)));
                State  := Unix_FD;
             when Unix_FD =>
-               if FD_Transfer_Support (C) then
+               if D_Bus.Platform.FD_Transfer_Support (C.Socket) then
                   SASL_Send (C_Negotiate_Unix_Fd);
 
                   case SASL_Receive (Buf) is

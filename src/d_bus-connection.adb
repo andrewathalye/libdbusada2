@@ -113,16 +113,8 @@ package body D_Bus.Connection is
    -----------------
    -- FD Transfer --
    -----------------
-   function FD_Transfer_Support (S : GNAT.Sockets.Socket_Type) return Boolean
-   is
-      use GNAT.Sockets;
-   begin
-      return D_Bus.Platform.FD_Transfer_Support
-         and Get_Socket_Name (S).Family = Family_Unix;
-   end FD_Transfer_Support;
-
    function FD_Transfer_Support (C : Connected_Connection) return Boolean
-   is (C.Unix_Fd_Support and FD_Transfer_Support (C.Socket));
+   is (C.Unix_Fd_Support and D_Bus.Platform.FD_Transfer_Support (C.Socket));
 
    --------------------
    -- Random Numbers --

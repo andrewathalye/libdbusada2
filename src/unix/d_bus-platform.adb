@@ -84,5 +84,11 @@ package body D_Bus.Platform is
       raise Program_Error;
    end Write_FD;
 
-   function FD_Transfer_Support return Boolean is (True);
+   function FD_Transfer_Support (S : GNAT.Sockets.Socket_Type) return Boolean
+   is
+      use type GNAT.Sockets.Family_Type;
+   begin
+      return
+        GNAT.Sockets.Get_Socket_Name (S).Family = GNAT.Sockets.Family_Unix;
+   end FD_Transfer_Support;
 end D_Bus.Platform;
