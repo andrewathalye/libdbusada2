@@ -16,6 +16,7 @@ with GNATCOLL.OS.FS;
 with GNATCOLL.OS.Process;
 
 with D_Bus.Platform;
+with D_Bus.Encodings;
 
 function D_Bus.Connection.Parse_Address
   (Mode : Mode_Type; Addr : Server_Address) return GNAT.Sockets.Socket_Set_Type
@@ -31,7 +32,7 @@ is
    function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type;
    function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type is
       use Ada.Strings.Unbounded;
-      use D_Bus.Connection.Encodings;
+      use D_Bus.Encodings;
 
       -------------------
       -- Early Renames --
@@ -111,6 +112,10 @@ is
         (Key_Value_Start (Key) /= 0);
       --  Return True if Transport_Props contains the given key,
       --  and False if it is not present.
+
+      function Random_Filename return String;
+      function Random_Filename return String
+      is (D_Bus.Encodings.To_Hex (String (New_UUID)));
 
       ----------
       -- Data --
@@ -412,7 +417,8 @@ is
                end if;
 
                Append (Info_File, "/.dbus/session-bus/");
-               Append (Info_File, D_Bus.Platform.Get_Machine_ID);
+               Append
+                 (Info_File, To_Hex (String (D_Bus.Platform.Get_Machine_ID)));
 
                --  Append display name if we can locate it
                --  TODO move elsewhere?

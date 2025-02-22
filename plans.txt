@@ -176,6 +176,8 @@ Client commands
          REJECTED
          ||
          DATA [SASL challenge response data]
+         ||
+         OK
    CANCEL (after AUTH but before BEGIN)
       REJECTED
    BEGIN

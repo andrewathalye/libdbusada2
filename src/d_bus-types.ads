@@ -7,6 +7,15 @@ package D_Bus.Types is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
    pragma Assertion_Policy (Static_Predicate => Check);
 
+   ----------
+   -- UUID --
+   ----------
+   type UUID is array (1 .. 16) of Character;
+   --  A raw, 16-byte UUID according to the
+   --  D-Bus specification. This is _not_
+   --  a string, it must be hex-encoded to use as
+   --  such.
+
    --------------------------
    -- Unchecked Signatures --
    --------------------------

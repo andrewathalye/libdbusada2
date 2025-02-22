@@ -15,6 +15,7 @@ library project D_Bus_Ada_2 extends "gpr/shared" is
          Source_Dirs := Source_Dirs & "src/unix";
    end case;
 
+   for Languages use ("Ada", "C");
    for Library_Name use "dbusada2";
    for Source_Dirs use Source_Dirs;
    for Object_Dir use "obj/" & Shared.Build_Mode;

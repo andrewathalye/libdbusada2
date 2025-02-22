@@ -1,12 +1,12 @@
 pragma Ada_2012;
 
 with Ada.Strings.Unbounded;
+with Ada.Characters.Handling;
 
 with GNAT.Regexp;
 with Interfaces;
 
-separate (D_Bus.Connection)
-package body Encodings is
+package body D_Bus.Encodings is
    pragma Assertion_Policy (Static_Predicate => Check);
    pragma Assertion_Policy (Dynamic_Predicate => Check);
 
@@ -44,7 +44,9 @@ package body Encodings is
    function To_Hex (Byte : Character) return Hex_Byte;
    function To_Hex (Byte : Character) return Hex_Byte is
       use type Interfaces.Unsigned_8;
-      Pos : constant Interfaces.Unsigned_8 := Character'Pos (Byte);
+
+      Pos : constant Interfaces.Unsigned_8 := Character'Pos
+        (Ada.Characters.Handling.To_Lower (Byte));
       Octet1 : constant Hex_Octet := To_Octet
         (Interfaces.Shift_Right (Pos, 4));
       Octet2 : constant Hex_Octet := To_Octet (Pos and 16#0F#);
@@ -96,7 +98,7 @@ package body Encodings is
             when '%' =>
                --  Ensure there is sufficient space for the two hex bytes
                if Index + 2 > Text'Last then
-                  raise Address_Error
+                  raise Invalid_Encoding
                     with "Incomplete escaped byte found. Abort decode.";
                end if;
 
@@ -108,7 +110,7 @@ package body Encodings is
                if not GNAT.Regexp.Match
                    (String'(1 => Text (Index)), Address_Safe_Bytes)
                then
-                  raise Address_Error
+                  raise Invalid_Encoding
                     with "Unrecognised byte found while decoding string.";
                end if;
 
@@ -145,5 +147,4 @@ package body Encodings is
 
       return Result;
    end From_Hex;
-
-end Encodings;
+end D_Bus.Encodings;
