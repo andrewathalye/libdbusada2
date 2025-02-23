@@ -3,6 +3,8 @@ pragma Ada_2012;
 with Ada.Streams;
 with Ada.Containers.Indefinite_Doubly_Linked_Lists;
 
+limited with D_Bus.Connection;
+
 package D_Bus.Types is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
    pragma Assertion_Policy (Static_Predicate => Check);
@@ -51,44 +53,31 @@ package D_Bus.Types is
    --------------------------------
    -- Checked Signature Elements --
    --------------------------------
-   subtype Basic_Signature_Element is Signature_Element
-   with
-     Static_Predicate =>
-       Basic_Signature_Element
-       in Byte_CC
-        | Boolean_CC
-        | Int16_CC
-        | Uint16_CC
-        | Int32_CC
-        | Uint32_CC
-        | Int64_CC
-        | Uint64_CC
-        | Double_CC
-        | File_Descriptor_CC
-        | String_CC
-        | Object_Path_CC
-        | Signature_CC;
+   subtype Basic_Signature_Element is Signature_Element with
+       Static_Predicate =>
+        Basic_Signature_Element in
+          Byte_CC | Boolean_CC | Int16_CC | Uint16_CC | Int32_CC | Uint32_CC
+          | Int64_CC | Uint64_CC | Double_CC | File_Descriptor_CC | String_CC
+          | Object_Path_CC | Signature_CC;
 
    ------------------------
    -- Checked Signatures --
    ------------------------
    function Validate_Single_Signature (X : U_Single_Signature) return Boolean;
-   subtype Single_Signature is U_Single_Signature
-   with
-     Dynamic_Predicate => Validate_Single_Signature (Single_Signature),
-     Predicate_Failure =>
-       "Invalid single signature " & String (Single_Signature);
+   subtype Single_Signature is U_Single_Signature with
+       Dynamic_Predicate => Validate_Single_Signature (Single_Signature),
+       Predicate_Failure =>
+        "Invalid single signature " & String (Single_Signature);
    --  Note: This does NOT check container type nesting.
    --  This omission is out of consideration for performance.
    --  All other specified signature rules are checked.
 
    function Validate_Contents_Signature
      (X : U_Contents_Signature) return Boolean;
-   subtype Contents_Signature is U_Contents_Signature
-   with
-     Dynamic_Predicate => Validate_Contents_Signature (Contents_Signature),
-     Predicate_Failure =>
-       "Invalid contents signature " & String (Contents_Signature);
+   subtype Contents_Signature is U_Contents_Signature with
+       Dynamic_Predicate => Validate_Contents_Signature (Contents_Signature),
+       Predicate_Failure =>
+        "Invalid contents signature " & String (Contents_Signature);
 
    --  A type which contains a list of valid `Single_Signature`s
 
@@ -111,8 +100,8 @@ package D_Bus.Types is
    -- Arrays of Signatures --
    --------------------------
    type Single_Signature_Array is
-     array (Positive range <>) of Interned_Single_Signature
-   with Dynamic_Predicate => Single_Signature_Array'Length > 0;
+     array (Positive range <>) of Interned_Single_Signature with
+     Dynamic_Predicate => Single_Signature_Array'Length > 0;
 
    function Split_Signature
      (X : Contents_Signature) return Single_Signature_Array;
@@ -126,8 +115,8 @@ package D_Bus.Types is
    function Signature (X : Root_Type) return Single_Signature is abstract;
    --  Signature of `X` as a single element
 
-   function Size (X : Root_Type) return Ada.Streams.Stream_Element_Count
-   is abstract;
+   function Size
+     (X : Root_Type) return Ada.Streams.Stream_Element_Count is abstract;
    --  Size in bytes of `X` without padding
 
    function Image (X : Root_Type) return String is abstract;
@@ -137,18 +126,33 @@ package D_Bus.Types is
    function "=" (L, R : Root_Type'Class) return Boolean;
    --  This comparison operator is SLOW and should be avoided
 
+   procedure Read
+     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+      Item : out Root_Type) is abstract;
+   --  See below for `Write` - the restrictions are identical.
+   --  Reading `Item` from a standard Ada stream is possible,
+   --  provided input data is in native Ada format.
+
+   procedure Write
+     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+      Item   : Root_Type) is abstract;
+   --  Write `Item` to an alignable stream as provided by D_Bus.Connection.
+   --  This will produce output in the D-Bus wire format.
+   --  Writing `Item` to a standard Ada stream is possible,
+   --  however the output format will be the platform default (not D-Bus).
+
    type Basic_Type is interface and Root_Type;
 
    type Container_Type is interface and Root_Type;
-   function Contents (X : Container_Type) return Contents_Signature
-   is abstract;
+   function Contents
+     (X : Container_Type) return Contents_Signature is abstract;
    --  Signature of the contents of Container `X`
 
    --------------------
    -- Argument Lists --
    --------------------
-   package Argument_Lists is new
-     Ada.Containers.Indefinite_Doubly_Linked_Lists (Root_Type'Class);
+   package Argument_Lists is new Ada.Containers.Indefinite_Doubly_Linked_Lists
+     (Root_Type'Class);
    subtype Argument_List is Argument_Lists.List;
    --  A list of arbitrary D-Bus types
 
@@ -164,22 +168,12 @@ package D_Bus.Types is
    -- Padding --
    -------------
    subtype Padding_Alignment is Ada.Streams.Stream_Element_Offset range 1 .. 8;
-   generic
-      type Base_Type is private;
-      Alignment_Bytes : Padding_Alignment;
-   package Padded_Types is
-      type Padded_Type is new Base_Type;
+   --  Valid range for padding alignment of a D-Bus standard type.
 
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : out Padded_Type);
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : Padded_Type);
-
-      for Padded_Type'Read use Read;
-      for Padded_Type'Write use Write;
-   end Padded_Types;
+   function Alignment_For (CC : Signature_Element) return Padding_Alignment;
+   pragma Pure_Function (Alignment_For);
+   --  Return the alignment required for the given signature element, where
+   --  `CC` is able to start a complete type (ex. excludes Dict_Start_CC)
 private
    -------------------------
    -- Constant Completion --

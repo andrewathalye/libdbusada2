@@ -323,9 +323,6 @@ package body D_Bus.Messages is
    Default_Message_Endianness : constant Message_Endianness  :=
      ME_Table_From_Ada (System.Default_Bit_Order);
 
-   type RMH_Padding_NR is null record;
-   package RMH_Padding is new D_Bus.Types.Padded_Types (RMH_Padding_NR, 8);
-
    package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
      (Type_Code => D_Bus.Types.Byte_CC, Inner => Field_Type);
    subtype D_Field_Type is D_Field_Types.Outer;
@@ -344,9 +341,9 @@ package body D_Bus.Messages is
       Body_Length      : D_Bus.Types.Basic.Uint32;
       Serial           : D_Message_Serial;
       Fields           : Field_Map_Raw;
-      Padding          : RMH_Padding.Padded_Type;
    end record with
      Read => Read_RMH;
+   --  TODO requires padding after, add Write_RMH
 
    procedure Read_RMH
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
@@ -374,7 +371,7 @@ package body D_Bus.Messages is
       D_Bus.Types.Basic.Uint32'Read (Stream, Item.Body_Length);
       D_Message_Serial'Read (Stream, Item.Serial);
       Field_Map_Raw'Read (Stream, Item.Fields);
-      RMH_Padding.Padded_Type'Read (Stream, Item.Padding);
+      --  TODO padding goes here
    end Read_RMH;
 
    procedure Read

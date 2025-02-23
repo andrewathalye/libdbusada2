@@ -5,8 +5,6 @@ with System.Storage_Elements;
 with System.Storage_Pools;
 with GNATCOLL.Strings;
 
-with D_Bus.Connection;
-
 package body D_Bus.Types is
    -------------------------
    -- Signature Interning --
@@ -345,44 +343,24 @@ package body D_Bus.Types is
       return Counter;
    end Size;
 
-   ------------------
-   -- Padded Types --
-   ------------------
-   package body Padded_Types is
-      ----------
-      -- Read --
-      ----------
-      procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : out Padded_Type)
-      is
-         use type Ada.Streams.Stream_Element_Offset;
-      begin
-         if Alignment_Bytes > 1 then
-            D_Bus.Connection.Read_Align
-              (Stream => D_Bus.Connection.As_Alignable_Stream (Stream),
-               Alignment => Alignment_Bytes);
-         end if;
+   -------------
+   -- Padding --
+   -------------
+   function Alignment_For (CC : Signature_Element) return Padding_Alignment is
+   (case CC is
+      when Byte_CC => 1,
+      when Boolean_CC => 4,
+      when Int16_CC | Uint16_CC => 2,
+      when Int32_CC | Uint32_CC => 4,
+      when Int64_CC | Uint64_CC => 8,
+      when Double_CC => 8,
+      when String_CC => Alignment_For (Uint32_CC),
+      when Object_Path_CC => Alignment_For (Uint32_CC),
+      when Signature_CC => Alignment_For (Byte_CC),
+      when Array_CC => Alignment_For (Uint32_CC),
+      when Struct_Start_CC => 8,
+      when Variant_CC => Alignment_For (Signature_CC),
+      when File_Descriptor_CC => 4,
+      when others => raise Program_Error);
 
-         Base_Type'Read (Stream, Base_Type (Item));
-      end Read;
-
-      -----------
-      -- Write --
-      -----------
-      procedure Write
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : Padded_Type)
-      is
-         use type Ada.Streams.Stream_Element_Offset;
-      begin
-         if Alignment_Bytes > 1 then
-            D_Bus.Connection.Write_Align
-              (Stream => D_Bus.Connection.As_Alignable_Stream (Stream),
-               Alignment => Alignment_Bytes);
-         end if;
-
-         Base_Type'Write (Stream, Base_Type (Item));
-      end Write;
-   end Padded_Types;
 end D_Bus.Types;
