@@ -3,8 +3,6 @@ pragma Ada_2012;
 with Ada.Streams;
 with Ada.Containers.Indefinite_Doubly_Linked_Lists;
 
-limited with D_Bus.Connection;
-
 package D_Bus.Types is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
    pragma Assertion_Policy (Static_Predicate => Check);
@@ -126,21 +124,6 @@ package D_Bus.Types is
    function "=" (L, R : Root_Type'Class) return Boolean;
    --  This comparison operator is SLOW and should be avoided
 
-   procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
-      Item : out Root_Type) is abstract;
-   --  See below for `Write` - the restrictions are identical.
-   --  Reading `Item` from a standard Ada stream is possible,
-   --  provided input data is in native Ada format.
-
-   procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
-      Item   : Root_Type) is abstract;
-   --  Write `Item` to an alignable stream as provided by D_Bus.Connection.
-   --  This will produce output in the D-Bus wire format.
-   --  Writing `Item` to a standard Ada stream is possible,
-   --  however the output format will be the platform default (not D-Bus).
-
    type Basic_Type is interface and Root_Type;
 
    type Container_Type is interface and Root_Type;
@@ -167,7 +150,7 @@ package D_Bus.Types is
    -------------
    -- Padding --
    -------------
-   subtype Padding_Alignment is Ada.Streams.Stream_Element_Offset range 1 .. 8;
+   subtype Padding_Alignment is Ada.Streams.Stream_Element_Count range 1 .. 8;
    --  Valid range for padding alignment of a D-Bus standard type.
 
    function Alignment_For (CC : Signature_Element) return Padding_Alignment;

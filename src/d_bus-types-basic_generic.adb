@@ -1,6 +1,35 @@
 pragma Ada_2022;
 
+with D_Bus.Connection;
+
 package body D_Bus.Types.Basic_Generic is
+   --------------------
+   -- Fixed_Wrappers --
+   --------------------
+   package body Fixed_Wrappers is
+      ----------
+      -- Read --
+      ----------
+      procedure Read
+        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+         Item   : out Outer)
+      is
+      begin
+         D_Bus.Connection.Read_Align (Stream, Inner'Size / 8);
+         Inner'Read (Stream, Item.I);
+      end Read;
+
+      procedure Write
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+         Item   : Outer)
+      is
+      begin
+         D_Bus.Connection.Write_Align (Stream, Inner'Size / 8);
+         Inner'Write (Stream, Item.I);
+      end Write;
+
+   end Fixed_Wrappers;
+
    ---------------------
    -- String_Wrappers --
    ---------------------
@@ -40,7 +69,9 @@ package body D_Bus.Types.Basic_Generic is
         (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Outer)
       is
+         use type Ada.Streams.Stream_Element_Offset;
       begin
+         D_Bus.Connection.Read_Align (Stream, Data_Length_Type'Size / 8);
          Item.I.Replace_Element (Internal_Type'Input (Stream));
       end Read;
 
@@ -51,7 +82,9 @@ package body D_Bus.Types.Basic_Generic is
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : Outer)
       is
+         use type Ada.Streams.Stream_Element_Offset;
       begin
+         D_Bus.Connection.Write_Align (Stream, Data_Length_Type'Size / 8);
          Internal_Type'Output (Stream, Item.I.Element);
       end Write;
 

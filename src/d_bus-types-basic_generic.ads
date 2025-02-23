@@ -2,8 +2,7 @@ pragma Ada_2012;
 
 with Ada.Containers.Indefinite_Holders;
 with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
-
-limited private with D_Bus.Connection;
+with Ada.Streams;
 
 package D_Bus.Types.Basic_Generic is
    --  Generic packages for creating basic types
@@ -38,16 +37,18 @@ package D_Bus.Types.Basic_Generic is
         (X : Outer) return Ada.Streams.Stream_Element_Count is
         (Inner'Size / 8);
 
-      overriding procedure Read
-        (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+      procedure Read
+        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Outer);
 
-      overriding procedure Write
-        (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+      procedure Write
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : Outer);
 
-      function "+" (X : Inner) return Outer is ((I => X));
+      for Outer'Read use Read;
+      for Outer'Write use Write;
 
+      function "+" (X : Inner) return Outer is ((I => X));
       function "+" (X : Outer) return Inner is (X.I);
    end Fixed_Wrappers;
 
@@ -55,10 +56,7 @@ package D_Bus.Types.Basic_Generic is
       Type_Code : Signature_Element;
       type Inner is (<>);
    package Discrete_Wrappers is
-      package Fixed_Types is new Fixed_Wrappers
-        (Type_Code, Inner, Inner'Image);
-
-      type Outer is new Fixed_Types.Outer with private with
+      type Outer is new Basic_Type with private with
         Integer_Literal => Value, String_Literal => Value;
 
       function "+" (X : Inner) return Outer;
@@ -68,19 +66,26 @@ package D_Bus.Types.Basic_Generic is
       function Value (X : Wide_Wide_String) return Outer is
         (+Inner'Wide_Wide_Value (X));
 
-      overriding function Image (X : Outer) return String;
+      overriding function Image (X : Outer) return String is
+        (Inner'(+X)'Image);
    private
+      package Fixed_Types is new Fixed_Wrappers
+        (Type_Code, Inner, Inner'Image);
+
       type Outer is new Fixed_Types.Outer with null record;
+
+      function "+" (X : Inner) return Outer is
+        (Fixed_Types."+" (X) with null record);
+      function "+" (X : Outer) return Inner is
+        (Fixed_Types."+" (Fixed_Types.Outer (X)));
+
    end Discrete_Wrappers;
 
    generic
       Type_Code : Signature_Element;
       type Inner is digits <>;
    package Real_Wrappers is
-      package Fixed_Types is new Fixed_Wrappers
-        (Type_Code, Inner, Inner'Image);
-
-      type Outer is new Fixed_Types.Outer with private with
+      type Outer is new Basic_Type with private with
         Real_Literal => Value;
 
       function "+" (X : Inner) return Outer;
@@ -88,9 +93,19 @@ package D_Bus.Types.Basic_Generic is
 
       function Value (X : String) return Outer is (+Inner'Value (X));
 
-      overriding function Image (X : Outer) return String;
+      overriding function Image (X : Outer) return String is
+        (Inner'(+X)'Image);
    private
+      package Fixed_Types is new Fixed_Wrappers
+        (Type_Code, Inner, Inner'Image);
+
       type Outer is new Fixed_Types.Outer with null record;
+
+      function "+" (X : Inner) return Outer is
+        (Fixed_Types."+" (X) with null record);
+      function "+" (X : Outer) return Inner is
+        (Fixed_Types."+" (Fixed_Types.Outer (X)));
+
    end Real_Wrappers;
 
    ------------------
@@ -130,14 +145,16 @@ package D_Bus.Types.Basic_Generic is
          I : ITH.Holder := ITH.To_Holder (Empty_Internal_Type);
       end record;
 
-      overriding procedure Read
-        (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+      procedure Read
+        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Outer);
-      --  TODO rewrite to use correct padding now with change
 
-      overriding procedure Write
-        (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+      procedure Write
+        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : Outer);
+
+      for Outer'Read use Read;
+      for Outer'Write use Write;
 
       overriding function Signature (X : Outer) return Single_Signature is
         (1 => Type_Code);

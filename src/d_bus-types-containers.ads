@@ -8,8 +8,6 @@ private with Ada.Containers.Indefinite_Holders;
 private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Indefinite_Hashed_Maps;
 
-limited private with D_Bus.Connection;
-
 package D_Bus.Types.Containers is
    pragma Assertion_Policy (Pre => Check);
 
@@ -231,13 +229,16 @@ private
    end record;
 
    procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Struct);
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Struct)
    with Pre => not Is_Empty (Item);
+
+   for Struct'Read use Read;
+   for Struct'Write use Write;
 
    overriding
    function Size (X : Struct) return Ada.Streams.Stream_Element_Count;
@@ -274,12 +275,15 @@ private
    end record;
 
    procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out D_Array);
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : D_Array);
+
+   for D_Array'Read use Read;
+   for D_Array'Write use Write;
 
    overriding
    function First (Object : D_Array) return Array_Cursor;
@@ -319,12 +323,15 @@ private
    end record;
 
    procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Dict);
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Dict);
+
+   for Dict'Read use Read;
+   for Dict'Write use Write;
 
    overriding
    function First (Object : Dict) return Dict_Cursor
@@ -348,13 +355,16 @@ private
    with Pre => not Is_Empty (X);
 
    procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Variant);
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Variant)
    with Pre => not Is_Empty (Item);
+
+   for Variant'Read use Read;
+   for Variant'Write use Write;
 
    function Is_Empty (Container : Variant) return Boolean
    is (Container.I.Is_Empty);

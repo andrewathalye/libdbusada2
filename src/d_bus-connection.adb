@@ -1,7 +1,6 @@
 pragma Ada_2012;
 
 with Ada.IO_Exceptions;
-with Ada.Tags;
 with Ada.Text_IO;
 with Ada.Real_Time;
 with Ada.Numerics.Discrete_Random;
@@ -25,21 +24,25 @@ package body D_Bus.Connection is
    -------------
    -- Streams --
    -------------
-   function As_Alignable_Stream
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-      return Alignable_Stream_Access
+   procedure Read_Align
+     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
+      Alignment : Alignment_Type)
    is
    begin
-      if Stream.all not in Alignable_Stream'Class then
-         raise Not_Alignable_Stream
-           with Ada.Tags.Expanded_Name (Stream.all'Tag);
-      end if;
-      return Alignable_Stream'Class (Stream.all)'Access;
-   end As_Alignable_Stream;
+      Alignable_Stream'Class (Stream.all)'Access.Read_Align (Alignment);
+   end Read_Align;
+
+   procedure Write_Align
+     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
+      Alignment : Alignment_Type)
+   is
+   begin
+      Alignable_Stream'Class (Stream.all)'Access.Write_Align (Alignment);
+   end Write_Align;
 
    procedure Read_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset)
+      Alignment : Alignment_Type)
    is
       use type Ada.Streams.Stream_Element_Offset;
 
@@ -48,7 +51,7 @@ package body D_Bus.Connection is
 
       Discard : Character;
    begin
-      Remainder := Stream.Write_Count mod Alignment;
+      Remainder   := Stream.Write_Count mod Alignment;
       Discrepancy := Alignment - Remainder;
 
       if Remainder = 0 then
@@ -62,14 +65,14 @@ package body D_Bus.Connection is
 
    procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset)
+      Alignment : Alignment_Type)
    is
       use type Ada.Streams.Stream_Element_Offset;
 
       Remainder   : Ada.Streams.Stream_Element_Offset;
       Discrepancy : Ada.Streams.Stream_Element_Offset;
    begin
-      Remainder := Stream.Write_Count mod Alignment;
+      Remainder   := Stream.Write_Count mod Alignment;
       Discrepancy := Alignment - Remainder;
 
       if Remainder = 0 then

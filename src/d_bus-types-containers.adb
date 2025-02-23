@@ -4,12 +4,13 @@ with Ada.Strings.Hash;
 with Ada.Text_IO;
 with D_Bus.Connection;
 with GNATCOLL.Strings;
-with Interfaces;
 
 with D_Bus.Types.Basic;
 with D_Bus.Types.Dispatching_Read;
 
 package body D_Bus.Types.Containers is
+   type Data_Length_Type is mod 2 ** 32;
+
    -------------------
    -- Type Checking --
    -------------------
@@ -57,7 +58,7 @@ package body D_Bus.Types.Containers is
    end Is_Empty;
 
    procedure Read
-     (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Struct)
    is
    begin
@@ -72,7 +73,7 @@ package body D_Bus.Types.Containers is
    end Read;
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Struct)
    is
    begin
@@ -109,6 +110,8 @@ package body D_Bus.Types.Containers is
       Container.Elements (Index).Replace_Element (Value);
    end Set;
 
+   --  TODO calculate how much padding is needed when
+   --  returning size
    overriding function Size
      (X : Struct) return Ada.Streams.Stream_Element_Count
    is
@@ -180,18 +183,18 @@ package body D_Bus.Types.Containers is
    end Element;
 
    procedure Read
-     (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out D_Array)
    is
       use Ada.Streams;
 
-      Length        : Interfaces.Unsigned_32;
+      Length        : Data_Length_Type;
       Stream_Length : Stream_Element_Count;
       Read_Count    : Stream_Element_Count := 0;
    begin
       --  Read size
       D_Bus.Connection.Read_Align (Stream, Alignment_For (Array_CC));
-      Interfaces.Unsigned_32'Read (Stream, Length);
+      Data_Length_Type'Read (Stream, Length);
       Stream_Length := Ada.Streams.Stream_Element_Count (Length);
 
       --  Align for first element even in empty array
@@ -214,7 +217,7 @@ package body D_Bus.Types.Containers is
    end Read;
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : D_Array)
    is
       use Ada.Streams;
@@ -229,7 +232,8 @@ package body D_Bus.Types.Containers is
 
       --  Write size and array
       D_Bus.Connection.Write_Align (Stream, Alignment_For (Array_CC));
-      Interfaces.Unsigned_32'Write (Stream, Stream_Length);
+      Data_Length_Type'Write
+        (Stream, Data_Length_Type (Stream_Length));
 
       --  Align even for empty array
       D_Bus.Connection.Write_Align
@@ -250,7 +254,7 @@ package body D_Bus.Types.Containers is
       Counter : Ada.Streams.Stream_Element_Count;
    begin
       --  Base size
-      Counter := Interfaces.Unsigned_32'Size / 8;
+      Counter := Data_Length_Type'Size / 8;
 
       for Element of X.Inner loop
          Counter := Counter + Element.Size;
@@ -391,7 +395,7 @@ package body D_Bus.Types.Containers is
    --  Note: this is an easy but not performant implementation
 
    procedure Read
-     (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Dict)
    is
       use Ada.Streams;
@@ -399,8 +403,9 @@ package body D_Bus.Types.Containers is
       Stream_Index  : Stream_Element_Count := 0;
    begin
       --  Read length
-      Padded_Data_Lengths.Padded_Type'Read
-        (Stream, Padded_Data_Lengths.Padded_Type (Stream_Length));
+      D_Bus.Connection.Read_Align (Stream, Alignment_For (Array_CC));
+      Data_Length_Type'Read
+        (Stream, Data_Length_Type (Stream_Length));
 
       --  Mandatory padding even for empty dict
       D_Bus.Connection.Read_Align (Stream, 8);
@@ -426,7 +431,7 @@ package body D_Bus.Types.Containers is
    end Read;
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class; Item : Dict)
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class; Item : Dict)
    is
       use Ada.Streams;
       Stream_Length : Stream_Element_Count := 0;
@@ -439,8 +444,8 @@ package body D_Bus.Types.Containers is
       end loop;
 
       D_Bus.Connection.Write_Align (Stream, Alignment_For (Array_CC));
-      Interfaces.Unsigned_32'Write
-        (Stream, Interfaces.Unsigned_32 (Stream_Length));
+      Data_Length_Type'Write
+        (Stream, Data_Length_Type (Stream_Length));
 
       D_Bus.Connection.Write_Align (Stream, 8);
 
@@ -464,8 +469,7 @@ package body D_Bus.Types.Containers is
    overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count
    is
       use Ada.Streams;
-      Counter : Stream_Element_Count :=
-        Padded_Data_Lengths.Padded_Type'Size / 8;
+      Counter : Stream_Element_Count := Data_Length_Type'Size / 8;
    begin
       for C in X.Inner.Iterate loop
          Counter :=
@@ -572,7 +576,7 @@ package body D_Bus.Types.Containers is
    end Image;
 
    procedure Read
-     (Stream :     not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Variant)
    is
       use type D_Bus.Types.Basic.D_Signature;
@@ -593,7 +597,7 @@ package body D_Bus.Types.Containers is
    end Read;
 
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : Variant)
    is
       use type D_Bus.Types.Basic.D_Signature;
@@ -602,7 +606,6 @@ package body D_Bus.Types.Containers is
       D_Bus.Types.Basic.D_Signature'Write (Stream, +Item.Contents);
 
       --  Write element
-      Root_Type'Class'Write (Stream, Item);
       Root_Type'Class'Write (Stream, Item.I.Element);
    end Write;
 

@@ -6,8 +6,6 @@ with GNAT.OS_Lib;
 
 with D_Bus.Types.Basic_Generic; use D_Bus.Types.Basic_Generic;
 
-limited private with D_Bus.Connection;
-
 package D_Bus.Types.Basic is
    -----------------
    -- Fixed Types --
@@ -100,17 +98,18 @@ private
 
    --  TODO implement sending file descriptors!
    --  over the wire these should send an index to OOB data array
-   overriding
    procedure Read
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out File_Descriptor)
    is null;
 
-   overriding
    procedure Write
-     (Stream : not null access D_Bus.Connection.Alignable_Stream'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : File_Descriptor)
    is null;
+
+   for File_Descriptor'Read use Read;
+   for File_Descriptor'Write use Write;
 
    overriding
    function Size (X : File_Descriptor) return Ada.Streams.Stream_Element_Count

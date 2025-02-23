@@ -28,25 +28,28 @@ package D_Bus.Connection is
    --------------------
    type Alignable_Stream is
    abstract new Ada.Streams.Root_Stream_Type with null record;
-   type Alignable_Stream_Access is access all Alignable_Stream'Class;
    --  A stream which supports aligning data reads and writes.
 
-   Not_Alignable_Stream : exception;
-   function As_Alignable_Stream
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class)
-      return Alignable_Stream_Access;
-   --  Safely convert an arbitrary Stream to an Alignable_Stream
-   --  iff that Stream was originally an Alignable_Stream
-   --  Raise `Not_Alignable_Stream` on exception
+   subtype Alignment_Type is
+     Ada.Streams
+       .Stream_Element_Count range 1 .. Ada.Streams.Stream_Element_Count'Last;
 
    procedure Read_Align
+     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
+      Alignment : Alignment_Type)
+      with Pre => Stream.all in Alignable_Stream'Class;
+   procedure Read_Align
      (Stream    : not null access Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset) is abstract;
+      Alignment : Alignment_Type) is abstract;
    --  Align `Stream` to `Alignment` by discarding input bytes.
 
    procedure Write_Align
+     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
+      Alignment : Alignment_Type)
+      with Pre => Stream.all in Alignable_Stream'Class;
+   procedure Write_Align
      (Stream    : not null access Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset) is abstract;
+      Alignment : Alignment_Type) is abstract;
    --  Align `Stream` to `Alignment` by emitting null bytes.
 
    function FD_Transfer_Support (C : Connected_Connection) return Boolean;
@@ -111,18 +114,18 @@ private
    Default_Autolaunch : constant Server_Address := "autolaunch:";
 
    type Canonical_Alignable_Stream is new Alignable_Stream with record
-      Connection   : not null access constant Connected_Connection;
+      Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
    end record;
 
    overriding procedure Read_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset);
+      Alignment : Alignment_Type);
 
    overriding procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Ada.Streams.Stream_Element_Offset);
+      Alignment : Alignment_Type);
 
    overriding procedure Read
      (Stream : in out Canonical_Alignable_Stream;
