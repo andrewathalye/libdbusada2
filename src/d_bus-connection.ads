@@ -39,15 +39,15 @@ package D_Bus.Connection is
    --  iff that Stream was originally an Alignable_Stream
    --  Raise `Not_Alignable_Stream` on exception
 
-   function Read_Count
-     (Stream : not null access Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset is abstract;
-   --  Get the current read offset into `Stream`
+   procedure Read_Align
+     (Stream    : not null access Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset) is abstract;
+   --  Align `Stream` to `Alignment` by discarding input bytes.
 
-   function Write_Count
-     (Stream : not null access Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset is abstract;
-   --  Get the current write offset into `Stream`
+   procedure Write_Align
+     (Stream    : not null access Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset) is abstract;
+   --  Align `Stream` to `Alignment` by emitting null bytes.
 
    function FD_Transfer_Support (C : Connected_Connection) return Boolean;
    --  Check whether `C` supports UNIX File Descriptor transfers.
@@ -111,18 +111,18 @@ private
    Default_Autolaunch : constant Server_Address := "autolaunch:";
 
    type Canonical_Alignable_Stream is new Alignable_Stream with record
-      Connection  : not null access constant Connected_Connection;
+      Connection   : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
    end record;
 
-   overriding function Read_Count
-     (Stream : not null access Canonical_Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset;
+   overriding procedure Read_Align
+     (Stream    : not null access Canonical_Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset);
 
-   overriding function Write_Count
-     (Stream : not null access Canonical_Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset;
+   overriding procedure Write_Align
+     (Stream    : not null access Canonical_Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset);
 
    overriding procedure Read
      (Stream : in out Canonical_Alignable_Stream;

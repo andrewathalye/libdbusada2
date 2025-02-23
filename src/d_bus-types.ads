@@ -111,7 +111,8 @@ package D_Bus.Types is
    -- Arrays of Signatures --
    --------------------------
    type Single_Signature_Array is
-     array (Positive range <>) of Interned_Single_Signature;
+     array (Positive range <>) of Interned_Single_Signature
+   with Dynamic_Predicate => Single_Signature_Array'Length > 0;
 
    function Split_Signature
      (X : Contents_Signature) return Single_Signature_Array;
@@ -153,14 +154,16 @@ package D_Bus.Types is
 
    function Signature (X : Argument_List) return Contents_Signature;
    --  Signature of `X` as a list of elements
+   --  `X` must NOT be empty, since a signature type cannot be empty.
 
    function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count;
-   --  Size in bytes of the arguments if serialised without padding
+   --  Size in bytes of the arguments if serialised. This includes all
+   --  INTERNAL padding.
 
    -------------
    -- Padding --
    -------------
-   type Padding_Alignment is range 1 .. 8;
+   subtype Padding_Alignment is Ada.Streams.Stream_Element_Offset range 1 .. 8;
    generic
       type Base_Type is private;
       Alignment_Bytes : Padding_Alignment;

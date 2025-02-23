@@ -29,15 +29,17 @@ package body D_Bus.Types.Basic_Generic is
       function Size (X : Outer) return Ada.Streams.Stream_Element_Count is
          use type Ada.Streams.Stream_Element_Offset;
       begin
-         return X.I.Element'Size / 8;
+         return
+           (X.I.Element.L'Size + X.I.Element.S'Size + X.I.Element.C'Size) / 8;
       end Size;
 
       ----------
       -- Read --
       ----------
       procedure Read
-        (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : out Outer) is
+        (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+         Item   : out Outer)
+      is
       begin
          Item.I.Replace_Element (Internal_Type'Input (Stream));
       end Read;
@@ -47,7 +49,8 @@ package body D_Bus.Types.Basic_Generic is
       -----------
       procedure Write
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-         Item   : Outer) is
+         Item   : Outer)
+      is
       begin
          Internal_Type'Output (Stream, Item.I.Element);
       end Write;

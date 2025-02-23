@@ -356,22 +356,13 @@ package body D_Bus.Types is
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Padded_Type)
       is
-         use type Ada.Streams.Stream_Element_Count;
-
-         ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-           D_Bus.Connection.As_Alignable_Stream (Stream);
-
-         Remainder : constant Ada.Streams.Stream_Element_Count :=
-           ASA.Read_Count
-           mod Ada.Streams.Stream_Element_Count (Alignment_Bytes);
-
-         Discard : Character;
+         use type Ada.Streams.Stream_Element_Offset;
       begin
-         for I in 1 .. Remainder loop
-            Character'Read (Stream, Discard);
-         end loop;
-         --  Note: We should enforce these are null, but there is no
-         --  security risk and the performance cost is unnecessarily high
+         if Alignment_Bytes > 1 then
+            D_Bus.Connection.Read_Align
+              (Stream => D_Bus.Connection.As_Alignable_Stream (Stream),
+               Alignment => Alignment_Bytes);
+         end if;
 
          Base_Type'Read (Stream, Base_Type (Item));
       end Read;
@@ -383,18 +374,13 @@ package body D_Bus.Types is
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : Padded_Type)
       is
-         use type Ada.Streams.Stream_Element_Count;
-
-         ASA : constant D_Bus.Connection.Alignable_Stream_Access :=
-           D_Bus.Connection.As_Alignable_Stream (Stream);
-
-         Remainder : constant Ada.Streams.Stream_Element_Count :=
-           ASA.Write_Count
-           mod Ada.Streams.Stream_Element_Count (Alignment_Bytes);
+         use type Ada.Streams.Stream_Element_Offset;
       begin
-         for I in 1 .. Remainder loop
-            Character'Write (Stream, ASCII.NUL);
-         end loop;
+         if Alignment_Bytes > 1 then
+            D_Bus.Connection.Write_Align
+              (Stream => D_Bus.Connection.As_Alignable_Stream (Stream),
+               Alignment => Alignment_Bytes);
+         end if;
 
          Base_Type'Write (Stream, Base_Type (Item));
       end Write;

@@ -37,21 +37,49 @@ package body D_Bus.Connection is
       return Alignable_Stream'Class (Stream.all)'Access;
    end As_Alignable_Stream;
 
-   function Read_Count
-     (Stream : not null access Canonical_Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset
+   procedure Read_Align
+     (Stream    : not null access Canonical_Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset)
    is
-   begin
-      return Stream.Read_Count;
-   end Read_Count;
+      use type Ada.Streams.Stream_Element_Offset;
 
-   function Write_Count
-     (Stream : not null access Canonical_Alignable_Stream)
-      return Ada.Streams.Stream_Element_Offset
-   is
+      Remainder   : Ada.Streams.Stream_Element_Offset;
+      Discrepancy : Ada.Streams.Stream_Element_Offset;
+
+      Discard : Character;
    begin
-      return Stream.Write_Count;
-   end Write_Count;
+      Remainder := Stream.Write_Count mod Alignment;
+      Discrepancy := Alignment - Remainder;
+
+      if Remainder = 0 then
+         Discrepancy := 0;
+      end if;
+
+      for I in 1 .. Discrepancy loop
+         Character'Read (Stream, Discard);
+      end loop;
+   end Read_Align;
+
+   procedure Write_Align
+     (Stream    : not null access Canonical_Alignable_Stream;
+      Alignment : Ada.Streams.Stream_Element_Offset)
+   is
+      use type Ada.Streams.Stream_Element_Offset;
+
+      Remainder   : Ada.Streams.Stream_Element_Offset;
+      Discrepancy : Ada.Streams.Stream_Element_Offset;
+   begin
+      Remainder := Stream.Write_Count mod Alignment;
+      Discrepancy := Alignment - Remainder;
+
+      if Remainder = 0 then
+         Discrepancy := 0;
+      end if;
+
+      for I in 1 .. Discrepancy loop
+         Character'Write (Stream, ASCII.NUL);
+      end loop;
+   end Write_Align;
 
    overriding procedure Read
      (Stream : in out Canonical_Alignable_Stream;
@@ -113,8 +141,8 @@ package body D_Bus.Connection is
    -----------------
    -- FD Transfer --
    -----------------
-   function FD_Transfer_Support (C : Connected_Connection) return Boolean
-   is (C.Unix_Fd_Support and D_Bus.Platform.FD_Transfer_Support (C.Socket));
+   function FD_Transfer_Support (C : Connected_Connection) return Boolean is
+     (C.Unix_Fd_Support and D_Bus.Platform.FD_Transfer_Support (C.Socket));
 
    --------------------
    -- Random Numbers --
@@ -183,8 +211,7 @@ package body D_Bus.Connection is
       return Result;
    end Connect;
 
-   function Listen (Address : Server_Address) return Connected_Connection
-   is
+   function Listen (Address : Server_Address) return Connected_Connection is
       Set                : GNAT.Sockets.Socket_Set_Type :=
         D_Bus.Connection.Parse_Address (Connect, Address);
       Unconnected_Socket : GNAT.Sockets.Socket_Type;
