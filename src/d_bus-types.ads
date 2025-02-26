@@ -114,8 +114,12 @@ package D_Bus.Types is
    --  Signature of `X` as a single element
 
    function Size
-     (X : Root_Type) return Ada.Streams.Stream_Element_Count is abstract;
-   --  Size in bytes of `X` without padding
+     (X : Root_Type; Count : Ada.Streams.Stream_Element_Count)
+      return Ada.Streams.Stream_Element_Count is abstract;
+   --  Size in bytes of `X` including padding at offset `Count`
+   --  Call with Count = 0 to see the size without external padding.
+   --  This is the exact number of bytes it would take to write or
+   --  read `X` from a stream.
 
    function Image (X : Root_Type) return String is abstract;
    --  Retrieve a view of `X` as a String
@@ -157,6 +161,11 @@ package D_Bus.Types is
    pragma Pure_Function (Alignment_For);
    --  Return the alignment required for the given signature element, where
    --  `CC` is able to start a complete type (ex. excludes Dict_Start_CC)
+
+   function Alignment_For (X : Single_Signature) return Padding_Alignment is
+     (Alignment_For (X (X'First)));
+   pragma Pure_Function (Alignment_For);
+   --  Return the alignment required for an object with the given signature.
 private
    -------------------------
    -- Constant Completion --

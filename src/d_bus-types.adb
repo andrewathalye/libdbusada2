@@ -313,7 +313,7 @@ package body D_Bus.Types is
          return False;
       end if;
 
-      if L.Size /= R.Size then
+      if L.Size (0) /= R.Size (0) then
          return False;
       end if;
 
@@ -338,7 +338,7 @@ package body D_Bus.Types is
       Counter : Ada.Streams.Stream_Element_Count := 0;
    begin
       for Element of X loop
-         Counter := Counter + Element.Size;
+         Counter := Counter + Element.Size (Counter);
       end loop;
       return Counter;
    end Size;

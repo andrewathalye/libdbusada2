@@ -4,6 +4,8 @@ with Ada.Containers.Indefinite_Holders;
 with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 with Ada.Streams;
 
+with D_Bus.Streams;
+
 package D_Bus.Types.Basic_Generic is
    --  Generic packages for creating basic types
 
@@ -27,15 +29,15 @@ package D_Bus.Types.Basic_Generic is
          I : Inner;
       end record;
 
-      --  TODO Read, Write to add padding back in
-
       overriding function Signature (X : Outer) return Single_Signature is
         (1 => Type_Code);
 
       use type Ada.Streams.Stream_Element_Offset;
       overriding function Size
-        (X : Outer) return Ada.Streams.Stream_Element_Count is
-        (Inner'Size / 8);
+        (X : Outer; Count : Ada.Streams.Stream_Element_Count)
+         return Ada.Streams.Stream_Element_Count is
+        (Inner'Size / 8 +
+         D_Bus.Streams.Alignment_Bytes (Count, Alignment_For (Type_Code)));
 
       procedure Read
         (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
@@ -160,6 +162,7 @@ package D_Bus.Types.Basic_Generic is
         (1 => Type_Code);
 
       overriding function Size
-        (X : Outer) return Ada.Streams.Stream_Element_Count;
+        (X : Outer; Count : Ada.Streams.Stream_Element_Count)
+         return Ada.Streams.Stream_Element_Count;
    end String_Wrappers;
 end D_Bus.Types.Basic_Generic;

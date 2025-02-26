@@ -1,8 +1,8 @@
 pragma Ada_2012;
 
 with Ada.Unchecked_Conversion;
-with Ada.Text_IO;
 
+with D_Bus.Streams;
 with Interfaces;
 with System;
 
@@ -231,6 +231,14 @@ package body D_Bus.Messages is
    -----------
    -- Flags --
    -----------
+   function Flags (M : Message) return Message_Flags is
+   begin
+      return M.Flags;
+   end Flags;
+
+   ------------
+   -- Fields --
+   ------------
    function Path (M : Message) return D_Bus.Types.Basic.Object_Path is
       use type D_Bus.Types.Basic.D_Object_Path;
    begin
@@ -341,14 +349,19 @@ package body D_Bus.Messages is
       Body_Length      : D_Bus.Types.Basic.Uint32;
       Serial           : D_Message_Serial;
       Fields           : Field_Map_Raw;
-   end record with
-     Read => Read_RMH;
-   --  TODO requires padding after, add Write_RMH
+   end record;
 
    procedure Read_RMH
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Raw_Message_Header);
    --  Custom read procedure that checks endianness and protocol version
+   for Raw_Message_Header'Read use Read_RMH;
+
+   procedure Write_RMH
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : Raw_Message_Header);
+   --  Custom write procedure that handles padding
+   for Raw_Message_Header'Write use Write_RMH;
 
    procedure Read_RMH
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
@@ -371,8 +384,31 @@ package body D_Bus.Messages is
       D_Bus.Types.Basic.Uint32'Read (Stream, Item.Body_Length);
       D_Message_Serial'Read (Stream, Item.Serial);
       Field_Map_Raw'Read (Stream, Item.Fields);
-      --  TODO padding goes here
+
+      --  Pad to 8 byte boundary
+      D_Bus.Streams.Read_Align (Stream, 8);
    end Read_RMH;
+
+
+   procedure Write_RMH
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item : Raw_Message_Header)
+   is
+   begin
+      Message_Endianness'Write (Stream, Item.Endianness);
+      Message_Type'Write (Stream, Item.M_Type);
+      Message_Flags'Write (Stream, Item.Flags);
+      Interfaces.Unsigned_8'Write (Stream, Item.Protocol_Version);
+
+      --  All further fields depend on endianness
+      --  TODO endianness
+      D_Bus.Types.Basic.Uint32'Write (Stream, Item.Body_Length);
+      D_Message_Serial'Write (Stream, Item.Serial);
+      Field_Map_Raw'Write (Stream, Item.Fields);
+
+      --  Pad to 8 byte boundary
+      D_Bus.Streams.Write_Align (Stream, 8);
+   end Write_RMH;
 
    procedure Read
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
@@ -505,13 +541,6 @@ package body D_Bus.Messages is
             RMH.Fields.Append (S);
          end;
       end if;
-
-      --  TODO Debug
-      for Field in RMH.Fields.Iterate loop
-         Ada.Text_IO.Put_Line (D_Bus.Types.Containers.Element (Field).Image);
-         Ada.Text_IO.Put_Line
-           (D_Bus.Types.Containers.Element (Field).Size'Image);
-      end loop;
 
       --  Write header
       --  Note: Alignment reset before this :)

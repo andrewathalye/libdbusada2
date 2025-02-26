@@ -123,6 +123,10 @@ package D_Bus.Messages is
      Global => null;
    pragma Pure_Function (M_Type);
 
+   function Flags (M : Message) return Message_Flags with
+      Global => null;
+   pragma Pure_Function (Flags);
+
    Field_Absent : exception;
    --  Raised when the requested field is not present
 

@@ -1,7 +1,5 @@
 pragma Ada_2022;
 
-with D_Bus.Connection;
-
 package body D_Bus.Types.Basic_Generic is
    --------------------
    -- Fixed_Wrappers --
@@ -15,7 +13,7 @@ package body D_Bus.Types.Basic_Generic is
          Item   : out Outer)
       is
       begin
-         D_Bus.Connection.Read_Align (Stream, Inner'Size / 8);
+         D_Bus.Streams.Read_Align (Stream, Inner'Size / 8);
          Inner'Read (Stream, Item.I);
       end Read;
 
@@ -24,7 +22,7 @@ package body D_Bus.Types.Basic_Generic is
          Item   : Outer)
       is
       begin
-         D_Bus.Connection.Write_Align (Stream, Inner'Size / 8);
+         D_Bus.Streams.Write_Align (Stream, Inner'Size / 8);
          Inner'Write (Stream, Item.I);
       end Write;
 
@@ -55,10 +53,14 @@ package body D_Bus.Types.Basic_Generic is
       ----------
       -- Size --
       ----------
-      function Size (X : Outer) return Ada.Streams.Stream_Element_Count is
+      function Size
+        (X : Outer; Count : Ada.Streams.Stream_Element_Count)
+         return Ada.Streams.Stream_Element_Count
+      is
          use type Ada.Streams.Stream_Element_Offset;
       begin
          return
+           D_Bus.Streams.Alignment_Bytes (Count, Data_Length_Type'Size / 8) +
            (X.I.Element.L'Size + X.I.Element.S'Size + X.I.Element.C'Size) / 8;
       end Size;
 
@@ -71,7 +73,7 @@ package body D_Bus.Types.Basic_Generic is
       is
          use type Ada.Streams.Stream_Element_Offset;
       begin
-         D_Bus.Connection.Read_Align (Stream, Data_Length_Type'Size / 8);
+         D_Bus.Streams.Read_Align (Stream, Data_Length_Type'Size / 8);
          Item.I.Replace_Element (Internal_Type'Input (Stream));
       end Read;
 
@@ -84,7 +86,7 @@ package body D_Bus.Types.Basic_Generic is
       is
          use type Ada.Streams.Stream_Element_Offset;
       begin
-         D_Bus.Connection.Write_Align (Stream, Data_Length_Type'Size / 8);
+         D_Bus.Streams.Write_Align (Stream, Data_Length_Type'Size / 8);
          Internal_Type'Output (Stream, Item.I.Element);
       end Write;
 

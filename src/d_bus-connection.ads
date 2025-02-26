@@ -1,11 +1,13 @@
 pragma Ada_2012;
 
+with Ada.Environment_Variables;
 with Ada.Streams;
 
 with GNAT.Sockets;
 
 with D_Bus.Messages;
 private with D_Bus.Types;
+private with D_Bus.Streams;
 
 package D_Bus.Connection is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
@@ -23,35 +25,9 @@ package D_Bus.Connection is
    subtype Connected_Connection is Connection with
        Dynamic_Predicate => Connected (Connected_Connection);
 
-   --------------------
-   -- Stream Support --
-   --------------------
-   type Alignable_Stream is
-   abstract new Ada.Streams.Root_Stream_Type with null record;
-   --  A stream which supports aligning data reads and writes.
-
-   subtype Alignment_Type is
-     Ada.Streams
-       .Stream_Element_Count range 1 .. Ada.Streams.Stream_Element_Count'Last;
-
-   procedure Read_Align
-     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
-      Alignment : Alignment_Type)
-      with Pre => Stream.all in Alignable_Stream'Class;
-   procedure Read_Align
-     (Stream    : not null access Alignable_Stream;
-      Alignment : Alignment_Type) is abstract;
-   --  Align `Stream` to `Alignment` by discarding input bytes.
-
-   procedure Write_Align
-     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
-      Alignment : Alignment_Type)
-      with Pre => Stream.all in Alignable_Stream'Class;
-   procedure Write_Align
-     (Stream    : not null access Alignable_Stream;
-      Alignment : Alignment_Type) is abstract;
-   --  Align `Stream` to `Alignment` by emitting null bytes.
-
+   -------------------
+   -- Compatibility --
+   -------------------
    function FD_Transfer_Support (C : Connected_Connection) return Boolean;
    --  Check whether `C` supports UNIX File Descriptor transfers.
    --  This requires support at both ends of the connection.
@@ -60,17 +36,25 @@ package D_Bus.Connection is
    -- Message Support --
    ---------------------
    procedure Send (C : aliased Connection; M : D_Bus.Messages.Message) with
-     Pre => Connected (C);
+     Pre => C in Connected_Connection;
    --  Send a message via connection `C`
 
    procedure Receive
      (C : aliased Connection; M : out D_Bus.Messages.Message) with
      Pre => Connected (C);
-     --  Receive a message from connection `C`
+   --  Receive a message from connection `C`
 
-   ---------------------------
-   -- Connection Management --
-   ---------------------------
+   function Check
+     (C : Connected_Connection;
+      Timeout : GNAT.Sockets.Selector_Duration) return Boolean;
+   --  Returns `True` if there is data to be read from `C` and `False`
+   --  otherwise.
+   --
+   --  Wait up to `Timeout` time for data to be available.
+
+   --------------------
+   -- Server Address --
+   --------------------
    subtype Server_Address is String with
        Dynamic_Predicate => Is_Valid (Server_Address);
    --  A D-Bus Server Address according to the specification.
@@ -81,11 +65,21 @@ package D_Bus.Connection is
    function Is_Valid (Addr : String) return Boolean;
    --  Validate the format, but not contents, of a server address
 
-   Default_Autolaunch : constant Server_Address;
-   --  A default address that will be used if no specific address
-   --  is specified for `Connect`. This will typically be the
-   --  userÃ¢ÂÂs session bus, if one exists.
 
+   -------------------------------
+   -- Standard Server Addresses --
+   -------------------------------
+   Session_Bus : constant Server_Address;
+   --  A standard, OS-neutral address that refers to the user's
+   --  session bus, if one exists.
+
+   System_Bus : constant Server_Address;
+   --  A standard, OS-neutral address that refers to a systemwide
+   --  bus, if one exists.
+
+   ---------------------------
+   -- Connection Management --
+   ---------------------------
    Address_Error : exception;
    --  An error that occurred while trying to interpret the contents
    --  of an address. This can occur with a well-formed address containing
@@ -97,12 +91,15 @@ package D_Bus.Connection is
    --  more servers to try, but each occurrence is logged.
 
    function Connect
-     (Address : Server_Address := Default_Autolaunch)
-      return Connected_Connection;
+     (Address : Server_Address := Session_Bus) return Connected_Connection;
    --  Connect `C` to one of the servers listed in `Address`
+   --  Once connected, you must complete a handshake with the remote server.
+   --  TODO
 
    function Listen (Address : Server_Address) return Connected_Connection;
    --  Start listening on the first valid server address in `Address`
+   --  TODO allow listening for multiple connections
+   --  TODO in general not sure what we want to do here. full message bus impl?
 
    procedure Disconnect (C : in out Connected_Connection);
    --  Disconnect and destroy data held by `C`
@@ -111,9 +108,17 @@ package D_Bus.Connection is
    type Mode_Type is private;
    --  Implementation detail
 private
-   Default_Autolaunch : constant Server_Address := "autolaunch:";
+   Session_Bus : constant Server_Address := "autolaunch:";
+   System_Bus  : constant Server_Address :=
+     Ada.Environment_Variables.Value
+       ("DBUS_SYSTEM_BUS_ADDRESS",
+        "unix:path=/var/run/dbus/system_bus_socket");
+   --  Note: there is nothing like 'autolaunch' specified for the system bus
+     --  this is, IMO, a flaw in the specification, but nevertheless we
+     --  need to be standards-compliant.
 
-   type Canonical_Alignable_Stream is new Alignable_Stream with record
+   type Canonical_Alignable_Stream is
+   new D_Bus.Streams.Alignable_Stream with record
       Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
@@ -121,11 +126,11 @@ private
 
    overriding procedure Read_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Alignment_Type);
+      Alignment : D_Bus.Streams.Alignment_Type);
 
    overriding procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Alignment_Type);
+      Alignment : D_Bus.Streams.Alignment_Type);
 
    overriding procedure Read
      (Stream : in out Canonical_Alignable_Stream;

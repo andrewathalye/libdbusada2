@@ -1,15 +1,14 @@
 pragma Ada_2012;
 
 with Ada.Strings.Hash;
-with Ada.Text_IO;
-with D_Bus.Connection;
 with GNATCOLL.Strings;
 
 with D_Bus.Types.Basic;
 with D_Bus.Types.Dispatching_Read;
+with D_Bus.Streams;
 
 package body D_Bus.Types.Containers is
-   type Data_Length_Type is mod 2 ** 32;
+   type Data_Length_Type is mod 2**32;
 
    -------------------
    -- Type Checking --
@@ -63,7 +62,7 @@ package body D_Bus.Types.Containers is
    is
    begin
       --  Padding
-      D_Bus.Connection.Read_Align (Stream, Alignment_For (Struct_Start_CC));
+      D_Bus.Streams.Read_Align (Stream, Alignment_For (Struct_Start_CC));
 
       --  Read all elements
       for I in 1 .. Item.Count loop
@@ -78,7 +77,7 @@ package body D_Bus.Types.Containers is
    is
    begin
       --  Padding
-      D_Bus.Connection.Write_Align (Stream, Alignment_For (Struct_Start_CC));
+      D_Bus.Streams.Write_Align (Stream, Alignment_For (Struct_Start_CC));
 
       --  Write all elements
       for I of Item.Elements loop
@@ -110,24 +109,23 @@ package body D_Bus.Types.Containers is
       Container.Elements (Index).Replace_Element (Value);
    end Set;
 
-   --  TODO calculate how much padding is needed when
-   --  returning size
    overriding function Size
-     (X : Struct) return Ada.Streams.Stream_Element_Count
+     (X : Struct; Count : Ada.Streams.Stream_Element_Count)
+      return Ada.Streams.Stream_Element_Count
    is
       use type Ada.Streams.Stream_Element_Count;
+      use D_Bus.Streams;
 
-      Buf : Ada.Streams.Stream_Element_Count := 0;
+      Accumulator : Ada.Streams.Stream_Element_Count;
    begin
+      Accumulator := Alignment_Bytes (Count, Alignment_For (Struct_Start_CC));
       for Holder of X.Elements loop
-         Ada.Text_IO.Put_Line
-           ("StructElem Size: " & Holder.Element.Size'Image);
-         Buf := Buf + Holder.Element.Size;
+         Accumulator :=
+           Accumulator + Holder.Element.Size (Accumulator + Count);
       end loop;
 
-      return Buf;
+      return Accumulator;
    end Size;
-   --  TODO all these now need to include internal padding :(((
 
    overriding function Image (X : Struct) return String is
       Buf : GNATCOLL.Strings.XString;
@@ -193,12 +191,13 @@ package body D_Bus.Types.Containers is
       Read_Count    : Stream_Element_Count := 0;
    begin
       --  Read size
-      D_Bus.Connection.Read_Align (Stream, Alignment_For (Array_CC));
+      D_Bus.Streams.Read_Align (Stream, Alignment_For (Array_CC));
       Data_Length_Type'Read (Stream, Length);
       Stream_Length := Ada.Streams.Stream_Element_Count (Length);
 
       --  Align for first element even in empty array
-      D_Bus.Connection.Read_Align
+      --  Note: this is NOT included in Stream_Length
+      D_Bus.Streams.Read_Align
         (Stream,
          Alignment_For
            (Item.Element_Signature.all (Item.Element_Signature.all'First)));
@@ -210,7 +209,7 @@ package body D_Bus.Types.Containers is
               D_Bus.Types.Dispatching_Read
                 (Stream, Item.Element_Signature.all);
          begin
-            Read_Count := Read_Count + Temp.Size;
+            Read_Count := Read_Count + Temp.Size (Read_Count);
             Item.Inner.Append (Temp);
          end;
       end loop;
@@ -225,18 +224,18 @@ package body D_Bus.Types.Containers is
       Stream_Length : Stream_Element_Count := 0;
    begin
       --  Calculate size
-      --  Note: We don't use .Size because that includes the Length itself
+      --  Note: We don't use .Size because that includes Length and
+      --  the padding after Length
       for Element of Item.Inner loop
-         Stream_Length := Stream_Length + Element.Size;
+         Stream_Length := Stream_Length + Element.Size (Stream_Length);
       end loop;
 
       --  Write size and array
-      D_Bus.Connection.Write_Align (Stream, Alignment_For (Array_CC));
-      Data_Length_Type'Write
-        (Stream, Data_Length_Type (Stream_Length));
+      D_Bus.Streams.Write_Align (Stream, Alignment_For (Array_CC));
+      Data_Length_Type'Write (Stream, Data_Length_Type (Stream_Length));
 
       --  Align even for empty array
-      D_Bus.Connection.Write_Align
+      D_Bus.Streams.Write_Align
         (Stream,
          Alignment_For
            (Item.Element_Signature.all (Item.Element_Signature.all'First)));
@@ -247,20 +246,23 @@ package body D_Bus.Types.Containers is
    end Write;
 
    overriding function Size
-     (X : D_Array) return Ada.Streams.Stream_Element_Count
+     (X : D_Array; Count : Ada.Streams.Stream_Element_Count)
+      return Ada.Streams.Stream_Element_Count
    is
       use type Ada.Streams.Stream_Element_Count;
+      use D_Bus.Streams;
 
-      Counter : Ada.Streams.Stream_Element_Count;
+      Accumulator : Ada.Streams.Stream_Element_Count;
    begin
       --  Base size
-      Counter := Data_Length_Type'Size / 8;
+      Accumulator := Alignment_Bytes (Count, Data_Length_Type'Size / 8);
+      Accumulator := Accumulator + Data_Length_Type'Size / 8;
 
       for Element of X.Inner loop
-         Counter := Counter + Element.Size;
+         Accumulator := Accumulator + Element.Size (Accumulator + Count);
       end loop;
 
-      return Counter;
+      return Accumulator;
    end Size;
 
    overriding function Image (X : D_Array) return String is
@@ -392,28 +394,29 @@ package body D_Bus.Types.Containers is
    begin
       return Ada.Strings.Hash (Key.Image);
    end Hash;
-   --  Note: this is an easy but not performant implementation
 
    procedure Read
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Dict)
    is
       use Ada.Streams;
+      use D_Bus.Streams;
+
       Stream_Length : Stream_Element_Count;
       Stream_Index  : Stream_Element_Count := 0;
    begin
       --  Read length
-      D_Bus.Connection.Read_Align (Stream, Alignment_For (Array_CC));
-      Data_Length_Type'Read
-        (Stream, Data_Length_Type (Stream_Length));
+      D_Bus.Streams.Read_Align (Stream, Alignment_For (Array_CC));
+      Data_Length_Type'Read (Stream, Data_Length_Type (Stream_Length));
 
       --  Mandatory padding even for empty dict
-      D_Bus.Connection.Read_Align (Stream, 8);
+      --  Note this padding is not included in Lenggth
+      D_Bus.Streams.Read_Align (Stream, 8);
 
       --  Read keys and values
       while Stream_Index < Stream_Length loop
          --  Dict_Entry padding
-         D_Bus.Connection.Read_Align (Stream, 8);
+         D_Bus.Streams.Read_Align (Stream, 8);
 
          declare
             Key   : constant Basic_Type'Class :=
@@ -425,7 +428,13 @@ package body D_Bus.Types.Containers is
                 (Stream, Item.Element_Signature.all);
          begin
             Item.Inner.Insert (Key, Value);
-            Stream_Index := Stream_Index + Key.Size + Value.Size;
+            --  Compute padded read counts
+            --  We don't process dict_entry types separately in this library,
+            --  but they are technically a distinct type with their own
+            --  padding.
+            Stream_Index := Stream_Index + Alignment_Bytes (Stream_Index, 8);
+            Stream_Index := Stream_Index + Key.Size (Stream_Index);
+            Stream_Index := Stream_Index + Value.Size (Stream_Index);
          end;
       end loop;
    end Read;
@@ -434,24 +443,29 @@ package body D_Bus.Types.Containers is
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class; Item : Dict)
    is
       use Ada.Streams;
+      use D_Bus.Streams;
       Stream_Length : Stream_Element_Count := 0;
    begin
       --  Calculate Length
-      --  Note: We don't use .Size because that includes the Length itself
+      --  Note: We don't use .Size because that includes
+      --  Length _and_ the padding after length
       for C in Item.Inner.Iterate loop
+         --  Dict entry padding
+         Stream_Length := Stream_Length + Alignment_Bytes (Stream_Length, 8);
          Stream_Length :=
-           Stream_Length + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
+           Stream_Length + Hash_Maps.Key (C).Size (Stream_Length);
+         Stream_Length :=
+           Stream_Length + Hash_Maps.Element (C).Size (Stream_Length);
       end loop;
 
-      D_Bus.Connection.Write_Align (Stream, Alignment_For (Array_CC));
-      Data_Length_Type'Write
-        (Stream, Data_Length_Type (Stream_Length));
+      D_Bus.Streams.Write_Align (Stream, Alignment_For (Array_CC));
+      Data_Length_Type'Write (Stream, Data_Length_Type (Stream_Length));
 
-      D_Bus.Connection.Write_Align (Stream, 8);
+      D_Bus.Streams.Write_Align (Stream, 8);
 
       --  Write Key - Value pairs
       for C in Item.Inner.Iterate loop
-         D_Bus.Connection.Write_Align (Stream, 8);
+         D_Bus.Streams.Write_Align (Stream, 8);
          Basic_Type'Class'Write (Stream, Hash_Maps.Key (C));
          Root_Type'Class'Write (Stream, Hash_Maps.Element (C));
       end loop;
@@ -466,17 +480,29 @@ package body D_Bus.Types.Containers is
       Container.Inner.Insert (Key, Value);
    end Insert;
 
-   overriding function Size (X : Dict) return Ada.Streams.Stream_Element_Count
+   overriding function Size
+     (X : Dict; Count : Ada.Streams.Stream_Element_Count)
+      return Ada.Streams.Stream_Element_Count
    is
       use Ada.Streams;
-      Counter : Stream_Element_Count := Data_Length_Type'Size / 8;
+      use D_Bus.Streams;
+
+      Accumulator : Stream_Element_Count;
    begin
+      --  Data length pre-padding and data length
+      Accumulator := Alignment_Bytes (Count, Data_Length_Type'Size / 8);
+      Accumulator := Accumulator + Data_Length_Type'Size / 8;
+
       for C in X.Inner.Iterate loop
-         Counter :=
-           Counter + Hash_Maps.Key (C).Size + Hash_Maps.Element (C).Size;
+         --  8-byte alignment for dict_entry type
+         Accumulator := Accumulator + Alignment_Bytes (Accumulator + Count, 8);
+         Accumulator :=
+           Accumulator + Hash_Maps.Key (C).Size (Accumulator + Count);
+         Accumulator :=
+           Accumulator + Hash_Maps.Element (C).Size (Accumulator + Count);
       end loop;
 
-      return Counter;
+      return Accumulator;
    end Size;
 
    overriding function Image (X : Dict) return String is
@@ -552,18 +578,19 @@ package body D_Bus.Types.Containers is
    end Get;
 
    overriding function Size
-     (X : Variant) return Ada.Streams.Stream_Element_Count
+     (X : Variant; Count : Ada.Streams.Stream_Element_Count)
+      return Ada.Streams.Stream_Element_Count
    is
       use type Ada.Streams.Stream_Element_Count;
       use type D_Bus.Types.Basic.D_Signature;
+
+      Accumulator : Ada.Streams.Stream_Element_Count;
    begin
       --  Type specification is to help out the compiler.
-      Ada.Text_IO.Put_Line
-        ("VarSig Size " &
-         D_Bus.Types.Basic.D_Signature'(+X.Contents).Size'Image);
-      Ada.Text_IO.Put_Line ("VarCont Size " & X.I.Element.Size'Image);
-      return
-        D_Bus.Types.Basic.D_Signature'(+X.Contents).Size + X.I.Element.Size;
+      Accumulator := D_Bus.Types.Basic.D_Signature'(+X.Contents).Size (Count);
+
+      Accumulator := Accumulator + X.I.Element.Size (Accumulator + Count);
+      return Accumulator;
    end Size;
 
    Variant_Signature : constant Single_Signature := (1 => Variant_CC);

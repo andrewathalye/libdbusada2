@@ -25,61 +25,26 @@ package body D_Bus.Connection is
    -- Streams --
    -------------
    procedure Read_Align
-     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
-      Alignment : Alignment_Type)
-   is
-   begin
-      Alignable_Stream'Class (Stream.all)'Access.Read_Align (Alignment);
-   end Read_Align;
-
-   procedure Write_Align
-     (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
-      Alignment : Alignment_Type)
-   is
-   begin
-      Alignable_Stream'Class (Stream.all)'Access.Write_Align (Alignment);
-   end Write_Align;
-
-   procedure Read_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Alignment_Type)
+      Alignment : D_Bus.Streams.Alignment_Type)
    is
-      use type Ada.Streams.Stream_Element_Offset;
-
-      Remainder   : Ada.Streams.Stream_Element_Offset;
-      Discrepancy : Ada.Streams.Stream_Element_Offset;
-
       Discard : Character;
    begin
-      Remainder   := Stream.Write_Count mod Alignment;
-      Discrepancy := Alignment - Remainder;
-
-      if Remainder = 0 then
-         Discrepancy := 0;
-      end if;
-
-      for I in 1 .. Discrepancy loop
+      for I in
+        1 .. D_Bus.Streams.Alignment_Bytes (Stream.Read_Count, Alignment)
+      loop
          Character'Read (Stream, Discard);
       end loop;
    end Read_Align;
 
    procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : Alignment_Type)
+      Alignment : D_Bus.Streams.Alignment_Type)
    is
-      use type Ada.Streams.Stream_Element_Offset;
-
-      Remainder   : Ada.Streams.Stream_Element_Offset;
-      Discrepancy : Ada.Streams.Stream_Element_Offset;
    begin
-      Remainder   := Stream.Write_Count mod Alignment;
-      Discrepancy := Alignment - Remainder;
-
-      if Remainder = 0 then
-         Discrepancy := 0;
-      end if;
-
-      for I in 1 .. Discrepancy loop
+      for I in
+        1 .. D_Bus.Streams.Alignment_Bytes (Stream.Write_Count, Alignment)
+      loop
          Character'Write (Stream, ASCII.NUL);
       end loop;
    end Write_Align;
@@ -141,6 +106,26 @@ package body D_Bus.Connection is
       D_Bus.Messages.Message'Read (S'Access, M);
    end Receive;
 
+   function Check
+     (C : Connected_Connection;
+      Timeout : GNAT.Sockets.Selector_Duration) return Boolean
+   is
+      use type GNAT.Sockets.Selector_Status;
+
+      R_Set, W_Set : GNAT.Sockets.Socket_Set_Type;
+      Status : GNAT.Sockets.Selector_Status;
+   begin
+      GNAT.Sockets.Set (R_Set, C.Socket);
+      GNAT.Sockets.Check_Selector
+        (Selector     => GNAT.Sockets.Null_Selector,
+         R_Socket_Set => R_Set,
+         W_Socket_Set => W_Set,
+         Status       => Status,
+         Timeout      => Timeout);
+
+      return Status = GNAT.Sockets.Completed;
+   end Check;
+
    -----------------
    -- FD Transfer --
    -----------------
@@ -184,7 +169,7 @@ package body D_Bus.Connection is
    end Is_Valid;
 
    function Connect
-     (Address : Server_Address := Default_Autolaunch)
+     (Address : Server_Address := Session_Bus)
       return Connected_Connection
    is
       Set : GNAT.Sockets.Socket_Set_Type :=
@@ -196,7 +181,6 @@ package body D_Bus.Connection is
          GNAT.Sockets.Get (Set, Result.Socket);
 
          if D_Bus.Connection.Try_Authenticate (Connect, Result) then
-            Ada.Text_IO.Put_Line ("Successful client authenticate TODO");
             exit;
          end if;
       end loop;
