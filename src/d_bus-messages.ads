@@ -2,6 +2,7 @@ pragma Ada_2012;
 
 with D_Bus.Types.Containers;
 with D_Bus.Types.Basic;
+with D_Bus.Types.Extra;
 
 with Ada.Streams;
 private with Ada.Containers.Ordered_Maps;
@@ -22,6 +23,15 @@ package D_Bus.Messages is
    --  serial number. Bear in mind, however, that the client
    --  receiving this duplicate message may not be expecting
    --  it.
+
+   procedure Read
+     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : out Message);
+   procedure Write
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : in out Message);
+   --  Implementation details, not to be used directly.
+   --  Use D_Bus.Connection instead
 
    -------------------
    -- Message Types --
@@ -60,60 +70,42 @@ package D_Bus.Messages is
 
    Default_Message_Flags : constant Message_Flags;
 
-   -----------------------
-   -- Validity Checking --
-   -----------------------
-   function Valid_Interface (X : String) return Boolean;
-   function Valid_Member (X : String) return Boolean;
-   function Valid_Bus (X : String) return Boolean;
-
-   subtype Interface_Name is String with
-       Dynamic_Predicate => Valid_Interface (Interface_Name),
-       Predicate_Failure => "Invalid interface name " & Interface_Name;
-
-   subtype Error_Name is Interface_Name;
-   --  TODO check whether regex inherits
-
-   subtype Member_Name is String with
-       Dynamic_Predicate => Valid_Member (Member_Name),
-       Predicate_Failure => "Invalid member name " & Member_Name;
-
-   subtype Bus_Name is String with
-       Dynamic_Predicate => Valid_Bus (Bus_Name),
-       Predicate_Failure => "Invalid bus name " & Bus_Name;
-
    -------------------------
    -- Message Composition --
    -------------------------
    No_Reply_Expected : exception;
 
    function Compose_Call
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name := "";
-      Member : Member_Name; Destination : Bus_Name := "") return Message;
+     (Flags       : Message_Flags                    := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : D_Bus.Types.Extra.Interface_Name := "";
+      Member      : D_Bus.Types.Extra.Member_Name;
+      Destination : D_Bus.Types.Extra.Bus_Name       := "") return Message;
    --  Prepare a message call
 
    function Compose_Return
      (Flags       : Message_Flags := Default_Message_Flags; Reply_To : Message;
-      Destination : Bus_Name      := "") return Message;
+      Destination : D_Bus.Types.Extra.Bus_Name := "") return Message;
    --  Prepare a message return
    --
    --  Raises `No_Reply_Expected` if `Reply_To` does
    --  not permit a reply.
 
    function Compose_Error
-     (Flags    : Message_Flags := Default_Message_Flags; Error : Error_Name;
-      Reply_To : Message; Destination : Bus_Name := "") return Message;
+     (Flags       : Message_Flags              := Default_Message_Flags;
+      Error       : D_Bus.Types.Extra.Error_Name; Reply_To : Message;
+      Destination : D_Bus.Types.Extra.Bus_Name := "") return Message;
    --  Prepare an error message
 
    function Compose_Signal
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path   : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name;
-      Member : Member_Name) return Message;
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : D_Bus.Types.Extra.Interface_Name;
+      Member      : D_Bus.Types.Extra.Member_Name) return Message;
    --  Prepare a signal
 
    procedure Add_Arguments
-     (M : out Message; Arguments : D_Bus.Types.Argument_List);
+     (M : in out Message; Arguments : D_Bus.Types.Argument_List);
    --  Add arguments to a message
 
    ---------------------
@@ -124,7 +116,7 @@ package D_Bus.Messages is
    pragma Pure_Function (M_Type);
 
    function Flags (M : Message) return Message_Flags with
-      Global => null;
+     Global => null;
    pragma Pure_Function (Flags);
 
    Field_Absent : exception;
@@ -134,15 +126,15 @@ package D_Bus.Messages is
    --  Obligatory in Method_Call and Signal
    --  May raise `Field_Absent`
 
-   function M_Interface (M : Message) return Interface_Name;
+   function M_Interface (M : Message) return D_Bus.Types.Extra.Interface_Name;
    --  Obligatory in Signal
    --  May raise `Field_Absent`
 
-   function Member (M : Message) return Member_Name;
+   function Member (M : Message) return D_Bus.Types.Extra.Member_Name;
    --  Obligatory in Method_Call and Signal
    --  May raise `Field_Absent`
 
-   function Error (M : Message) return Error_Name with
+   function Error (M : Message) return D_Bus.Types.Extra.Error_Name with
      Pre => M_Type (M) = Error;
 
    function Is_Reply (Original, Reply : Message) return Boolean with
@@ -150,8 +142,9 @@ package D_Bus.Messages is
       M_Type (Original) = Method_Call and
       M_Type (Reply) in Method_Return | Error;
 
-   function Destination (M : Message) return Bus_Name;
-   function Sender (M : Message) return Bus_Name;
+   function Destination (M : Message) return D_Bus.Types.Extra.Bus_Name;
+
+   function Sender (M : Message) return D_Bus.Types.Extra.Bus_Name;
    function Signature (M : Message) return D_Bus.Types.Contents_Signature;
    --  Optional: may raise `Field_Absent`
 
@@ -195,15 +188,4 @@ private
       Arguments : D_Bus.Types.Argument_List;
    end record;
    --  Note: this is not the internal representation over the wire
-
-   procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out Message);
-
-   procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Message);
-
-   for Message'Read use Read;
-   for Message'Write use Write;
 end D_Bus.Messages;

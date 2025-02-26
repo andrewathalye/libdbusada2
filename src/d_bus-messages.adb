@@ -6,8 +6,6 @@ with D_Bus.Streams;
 with Interfaces;
 with System;
 
-with GNAT.Regexp;
-
 with D_Bus.Types.Basic_Generic;
 with D_Bus.Types.Dispatching_Read;
 
@@ -62,41 +60,6 @@ package body D_Bus.Messages is
       Message_Flags_Ersatz'Write (Stream, To_Ersatz (Item));
    end Write;
 
-   -----------------------
-   -- Validity Checking --
-   -----------------------
-   --  From dbus-binding-generator-ada/share/introspect.xsd
-   Interface_Regexp : constant GNAT.Regexp.Regexp :=
-     GNAT.Regexp.Compile
-       (Pattern => "([a-zA-Z_]([a-zA-Z0-9_])*\.)+[a-zA-Z_]([a-zA-Z0-9_])*");
-   function Valid_Interface (X : String) return Boolean is
-   begin
-      return GNAT.Regexp.Match (X, Interface_Regexp) and X'Length < 256;
-   end Valid_Interface;
-
-   ------------------
-   -- Valid_Member --
-   ------------------
-   --  From dbus-binding-generator-ada/share/introspect.xsd
-   Member_Regexp : constant GNAT.Regexp.Regexp :=
-     GNAT.Regexp.Compile (Pattern => "([a-zA-Z0-9_])*");
-   function Valid_Member (X : String) return Boolean is
-   begin
-      return GNAT.Regexp.Match (X, Member_Regexp) and X'Length < 256;
-   end Valid_Member;
-
-   ---------------
-   -- Valid_Bus --
-   ---------------
-   Bus_Regexp : constant GNAT.Regexp.Regexp :=
-     GNAT.Regexp.Compile
-       (Pattern =>
-          "((:[A-Za-z0-9])|([A-Za-z]))((\.)*[a-zA-Z0-9]([a-zA-Z0-9_-])*)*");
-   function Valid_Bus (X : String) return Boolean is
-   begin
-      return GNAT.Regexp.Match (X, Bus_Regexp) and X'Length < 256;
-   end Valid_Bus;
-
    procedure Assert_Or_Protocol_Error (Expr : Boolean);
    --  Assert that the expression or true or raise a protocol error
 
@@ -111,9 +74,11 @@ package body D_Bus.Messages is
    -- Compose_Call --
    ------------------
    function Compose_Call
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name := "";
-      Member : Member_Name; Destination : Bus_Name := "") return Message
+     (Flags       : Message_Flags                    := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : D_Bus.Types.Extra.Interface_Name := "";
+      Member      : D_Bus.Types.Extra.Member_Name;
+      Destination : D_Bus.Types.Extra.Bus_Name       := "") return Message
    is
       use type D_Bus.Types.Basic.D_Object_Path;
       use type D_Bus.Types.Basic.D_String;
@@ -137,7 +102,7 @@ package body D_Bus.Messages is
    --------------------
    function Compose_Return
      (Flags       : Message_Flags := Default_Message_Flags; Reply_To : Message;
-      Destination : Bus_Name      := "") return Message
+      Destination : D_Bus.Types.Extra.Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
@@ -163,8 +128,9 @@ package body D_Bus.Messages is
    -- Compose_Error --
    -------------------
    function Compose_Error
-     (Flags    : Message_Flags := Default_Message_Flags; Error : Error_Name;
-      Reply_To : Message; Destination : Bus_Name := "") return Message
+     (Flags       : Message_Flags              := Default_Message_Flags;
+      Error       : D_Bus.Types.Extra.Error_Name; Reply_To : Message;
+      Destination : D_Bus.Types.Extra.Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
@@ -191,9 +157,10 @@ package body D_Bus.Messages is
    -- Compose_Signal --
    --------------------
    function Compose_Signal
-     (Flags  : Message_Flags := Default_Message_Flags;
-      Path   : D_Bus.Types.Basic.Object_Path; M_Interface : Interface_Name;
-      Member : Member_Name) return Message
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Path        : D_Bus.Types.Basic.Object_Path;
+      M_Interface : D_Bus.Types.Extra.Interface_Name;
+      Member      : D_Bus.Types.Extra.Member_Name) return Message
    is
       use type D_Bus.Types.Basic.D_Object_Path;
       use type D_Bus.Types.Basic.D_String;
@@ -212,7 +179,7 @@ package body D_Bus.Messages is
    -- Add_Arguments --
    -------------------
    procedure Add_Arguments
-     (M : out Message; Arguments : D_Bus.Types.Argument_List)
+     (M : in out Message; Arguments : D_Bus.Types.Argument_List)
    is
    begin
       for A of Arguments loop
@@ -248,7 +215,8 @@ package body D_Bus.Messages is
          raise Field_Absent;
    end Path;
 
-   function M_Interface (M : Message) return Interface_Name is
+   function M_Interface (M : Message) return D_Bus.Types.Extra.Interface_Name
+   is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Interface).Get);
@@ -257,7 +225,7 @@ package body D_Bus.Messages is
          raise Field_Absent;
    end M_Interface;
 
-   function Member (M : Message) return Member_Name is
+   function Member (M : Message) return D_Bus.Types.Extra.Member_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Member).Get);
@@ -266,24 +234,24 @@ package body D_Bus.Messages is
          raise Field_Absent;
    end Member;
 
-   function Error (M : Message) return Error_Name is
+   function Error (M : Message) return D_Bus.Types.Extra.Error_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Error_Name).Get);
    end Error;
    function Is_Reply (Original, Reply : Message) return Boolean is
-      use type D_Message_Serial;
+      Reply_RS : Valid_Message_Serial;
    begin
+      Reply_RS :=
+        Valid_Message_Serial
+          (D_Bus.Types.Basic.Uint32s."+"
+             (D_Bus.Types.Basic.Uint32 (Reply.Fields (F_Reply_Serial).Get)));
       return
-        Original.Flags.No_Reply_Expected
-        and then Original.Serial =
-          +D_Message_Serial (Reply.Fields (F_Reply_Serial).Get);
-   exception
-      when Constraint_Error =>
-         return False;
+        (not Original.Flags.No_Reply_Expected)
+        and then Original.Serial = Reply_RS;
    end Is_Reply;
 
-   function Destination (M : Message) return Bus_Name is
+   function Destination (M : Message) return D_Bus.Types.Extra.Bus_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Destination).Get);
@@ -292,7 +260,7 @@ package body D_Bus.Messages is
          raise Field_Absent;
    end Destination;
 
-   function Sender (M : Message) return Bus_Name is
+   function Sender (M : Message) return D_Bus.Types.Extra.Bus_Name is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Sender).Get);
@@ -338,8 +306,7 @@ package body D_Bus.Messages is
    Field_Struct_Contents : constant D_Bus.Types.Contents_Signature := "yv";
 
    subtype Field_Map_Raw is
-     D_Bus.Types.Containers.D_Array
-       (D_Bus.Types.Intern ("(yv)"));
+     D_Bus.Types.Containers.D_Array (D_Bus.Types.Intern ("(yv)"));
 
    type Raw_Message_Header is record
       Endianness       : Message_Endianness    := Default_Message_Endianness;
@@ -359,7 +326,7 @@ package body D_Bus.Messages is
 
    procedure Write_RMH
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : Raw_Message_Header);
+      Item   : Raw_Message_Header);
    --  Custom write procedure that handles padding
    for Raw_Message_Header'Write use Write_RMH;
 
@@ -389,10 +356,9 @@ package body D_Bus.Messages is
       D_Bus.Streams.Read_Align (Stream, 8);
    end Read_RMH;
 
-
    procedure Write_RMH
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item : Raw_Message_Header)
+      Item   : Raw_Message_Header)
    is
    begin
       Message_Endianness'Write (Stream, Item.Endianness);
@@ -493,8 +459,8 @@ package body D_Bus.Messages is
    end Read;
 
    procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Message)
+     (Stream :        not null access Ada.Streams.Root_Stream_Type'Class;
+      Item   : in out Message)
    is
       use type D_Message_Serial;
       use type D_Field_Type;
@@ -505,13 +471,18 @@ package body D_Bus.Messages is
       RMH : Raw_Message_Header;
       S   : Valid_Message_Serial;
    begin
+      --  Make serial
+      Global_Serials.Next_Serial (S);
+      Item :=
+        (Serial => S, M_Type => Item.M_Type, Flags => Item.Flags,
+         Fields => Item.Fields, Arguments => Item.Arguments);
+
       --  Prepare header
       RMH.M_Type      := Item.M_Type;
       RMH.Flags       := Item.Flags;
       RMH.Body_Length :=
         +Interfaces.Unsigned_32 (D_Bus.Types.Size (Item.Arguments));
-      Global_Serials.Next_Serial (S);
-      RMH.Serial := +S;
+      RMH.Serial      := +Item.Serial;
 
       --  Add all standard fields
       for Cursor in Item.Fields.Iterate loop

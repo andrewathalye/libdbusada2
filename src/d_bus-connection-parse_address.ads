@@ -1,7 +1,7 @@
 pragma Ada_2012;
 
 function D_Bus.Connection.Parse_Address
-  (Mode : Mode_Type; Addr : Server_Address)
+  (Mode : Mode_Type; Addr : D_Bus.Types.Extra.Server_Address)
    return GNAT.Sockets.Socket_Set_Type;
 
 --  Parse a given address and return a set of populated sockets

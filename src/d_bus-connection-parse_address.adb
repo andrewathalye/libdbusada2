@@ -19,7 +19,8 @@ with D_Bus.Platform;
 with D_Bus.Encodings;
 
 function D_Bus.Connection.Parse_Address
-  (Mode : Mode_Type; Addr : Server_Address) return GNAT.Sockets.Socket_Set_Type
+  (Mode : Mode_Type; Addr : D_Bus.Types.Extra.Server_Address)
+   return GNAT.Sockets.Socket_Set_Type
 is
    use GNAT.Sockets;
 
@@ -47,7 +48,7 @@ is
 
       function Key_Value_Start (Key : String) return Natural is
          Key_Name_Start : Positive := Transport_Props'First;
-         Equal_Pos   : Natural;
+         Equal_Pos      : Natural;
       begin
          Iterate_Key_Names :
          while Key_Name_Start < Transport_Props'Last loop
@@ -81,8 +82,7 @@ is
                exit Iterate_Key_Names;
             else
                Key_Name_Start :=
-                 Ada.Strings.Fixed.Index (Transport_Props, ",", Equal_Pos) +
-                 1;
+                 Ada.Strings.Fixed.Index (Transport_Props, ",", Equal_Pos) + 1;
             end if;
          end loop Iterate_Key_Names;
 
@@ -114,15 +114,15 @@ is
       --  and False if it is not present.
 
       function Random_Filename return String;
-      function Random_Filename return String
-      is (D_Bus.Encodings.To_Hex (String (New_UUID)));
+      function Random_Filename return String is
+        (D_Bus.Encodings.To_Hex (String (New_UUID)));
 
       ----------
       -- Data --
       ----------
-      Transport       : Server_Transport;
-      Family          : Family_Type;
-      Address         : Sock_Addr_Type;
+      Transport : Server_Transport;
+      Family    : Family_Type;
+      Address   : Sock_Addr_Type;
       --  Note Compiler will warn if it is possible for these to be
       --  uninitialised.
    begin

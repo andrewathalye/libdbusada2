@@ -3,10 +3,10 @@ pragma Ada_2012;
 with Ada.Environment_Variables;
 with Ada.Streams;
 
+with D_Bus.Types.Extra;
 with GNAT.Sockets;
 
 with D_Bus.Messages;
-private with D_Bus.Types;
 private with D_Bus.Streams;
 
 package D_Bus.Connection is
@@ -35,9 +35,12 @@ package D_Bus.Connection is
    ---------------------
    -- Message Support --
    ---------------------
-   procedure Send (C : aliased Connection; M : D_Bus.Messages.Message) with
+   procedure Send
+     (C : aliased Connection; M : in out D_Bus.Messages.Message) with
      Pre => C in Connected_Connection;
    --  Send a message via connection `C`
+   --  The same message object may be sent multiple times, in which case
+   --  it will receive a new serial number each time it is sent.
 
    procedure Receive
      (C : aliased Connection; M : out D_Bus.Messages.Message) with
@@ -45,35 +48,21 @@ package D_Bus.Connection is
    --  Receive a message from connection `C`
 
    function Check
-     (C : Connected_Connection;
-      Timeout : GNAT.Sockets.Selector_Duration) return Boolean;
+     (C : Connected_Connection; Timeout : GNAT.Sockets.Selector_Duration)
+      return Boolean;
    --  Returns `True` if there is data to be read from `C` and `False`
    --  otherwise.
    --
    --  Wait up to `Timeout` time for data to be available.
 
-   --------------------
-   -- Server Address --
-   --------------------
-   subtype Server_Address is String with
-       Dynamic_Predicate => Is_Valid (Server_Address);
-   --  A D-Bus Server Address according to the specification.
-   --  This may specify multiple concrete servers, the below
-   --  subprograms will try them, one by one, and use the first
-   --  valid one.
-
-   function Is_Valid (Addr : String) return Boolean;
-   --  Validate the format, but not contents, of a server address
-
-
    -------------------------------
    -- Standard Server Addresses --
    -------------------------------
-   Session_Bus : constant Server_Address;
+   Session_Bus : constant D_Bus.Types.Extra.Server_Address;
    --  A standard, OS-neutral address that refers to the user's
    --  session bus, if one exists.
 
-   System_Bus : constant Server_Address;
+   System_Bus : constant D_Bus.Types.Extra.Server_Address;
    --  A standard, OS-neutral address that refers to a systemwide
    --  bus, if one exists.
 
@@ -91,12 +80,14 @@ package D_Bus.Connection is
    --  more servers to try, but each occurrence is logged.
 
    function Connect
-     (Address : Server_Address := Session_Bus) return Connected_Connection;
+     (Address : D_Bus.Types.Extra.Server_Address := Session_Bus)
+      return Connected_Connection;
    --  Connect `C` to one of the servers listed in `Address`
    --  Once connected, you must complete a handshake with the remote server.
    --  TODO
 
-   function Listen (Address : Server_Address) return Connected_Connection;
+   function Listen
+     (Address : D_Bus.Types.Extra.Server_Address) return Connected_Connection;
    --  Start listening on the first valid server address in `Address`
    --  TODO allow listening for multiple connections
    --  TODO in general not sure what we want to do here. full message bus impl?
@@ -108,14 +99,14 @@ package D_Bus.Connection is
    type Mode_Type is private;
    --  Implementation detail
 private
-   Session_Bus : constant Server_Address := "autolaunch:";
-   System_Bus  : constant Server_Address :=
+   Session_Bus : constant D_Bus.Types.Extra.Server_Address := "autolaunch:";
+   System_Bus  : constant D_Bus.Types.Extra.Server_Address :=
      Ada.Environment_Variables.Value
        ("DBUS_SYSTEM_BUS_ADDRESS",
         "unix:path=/var/run/dbus/system_bus_socket");
    --  Note: there is nothing like 'autolaunch' specified for the system bus
-     --  this is, IMO, a flaw in the specification, but nevertheless we
-     --  need to be standards-compliant.
+   --  this is, IMO, a flaw in the specification, but nevertheless we
+   --  need to be standards-compliant.
 
    type Canonical_Alignable_Stream is
    new D_Bus.Streams.Alignable_Stream with record

@@ -9,7 +9,6 @@ with D_Bus.Connection.Parse_Address;
 with D_Bus.Connection.Try_Authenticate;
 
 with D_Bus.Platform;
-with GNAT.Regpat;
 
 package body D_Bus.Connection is
    ---------------
@@ -93,35 +92,33 @@ package body D_Bus.Connection is
    end Stream;
 
    --  TODO don’t make a fresh stream?
-   procedure Send (C : aliased Connection; M : D_Bus.Messages.Message) is
+   procedure Send (C : aliased Connection; M : in out D_Bus.Messages.Message)
+   is
       S : aliased Canonical_Alignable_Stream := Stream (C);
    begin
-      D_Bus.Messages.Message'Write (S'Access, M);
+      D_Bus.Messages.Write (S'Access, M);
    end Send;
 
    procedure Receive (C : aliased Connection; M : out D_Bus.Messages.Message)
    is
       S : aliased Canonical_Alignable_Stream := Stream (C);
    begin
-      D_Bus.Messages.Message'Read (S'Access, M);
+      D_Bus.Messages.Read (S'Access, M);
    end Receive;
 
    function Check
-     (C : Connected_Connection;
-      Timeout : GNAT.Sockets.Selector_Duration) return Boolean
+     (C : Connected_Connection; Timeout : GNAT.Sockets.Selector_Duration)
+      return Boolean
    is
       use type GNAT.Sockets.Selector_Status;
 
       R_Set, W_Set : GNAT.Sockets.Socket_Set_Type;
-      Status : GNAT.Sockets.Selector_Status;
+      Status       : GNAT.Sockets.Selector_Status;
    begin
       GNAT.Sockets.Set (R_Set, C.Socket);
       GNAT.Sockets.Check_Selector
-        (Selector     => GNAT.Sockets.Null_Selector,
-         R_Socket_Set => R_Set,
-         W_Socket_Set => W_Set,
-         Status       => Status,
-         Timeout      => Timeout);
+        (Selector     => GNAT.Sockets.Null_Selector, R_Socket_Set => R_Set,
+         W_Socket_Set => W_Set, Status => Status, Timeout => Timeout);
 
       return Status = GNAT.Sockets.Completed;
    end Check;
@@ -150,26 +147,8 @@ package body D_Bus.Connection is
    ---------------------------------
    -- Connection Public Interface --
    ---------------------------------
-   pragma Style_Checks (Off);
-   Server_Regpat : constant GNAT.Regpat.Pattern_Matcher :=
-     GNAT.Regpat.Compile
-       (Expression =>
-          "(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?)(?:;(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?))*");
-   --  Note: Generated from specification using tools/regex_serveraddr.sh
-   --  This will recognise any SYNTACTICALLY valid server address
-   pragma Style_Checks (On);
-
-   function Is_Valid (Addr : String) return Boolean is
-   begin
-      return True;
-      pragma Warnings (Off);
-      --  TODO crashing here
-      return GNAT.Regpat.Match (Server_Regpat, Addr);
-      pragma Warnings (On);
-   end Is_Valid;
-
    function Connect
-     (Address : Server_Address := Session_Bus)
+     (Address : D_Bus.Types.Extra.Server_Address := Session_Bus)
       return Connected_Connection
    is
       Set : GNAT.Sockets.Socket_Set_Type :=
@@ -198,7 +177,9 @@ package body D_Bus.Connection is
       return Result;
    end Connect;
 
-   function Listen (Address : Server_Address) return Connected_Connection is
+   function Listen
+     (Address : D_Bus.Types.Extra.Server_Address) return Connected_Connection
+   is
       Set                : GNAT.Sockets.Socket_Set_Type :=
         D_Bus.Connection.Parse_Address (Connect, Address);
       Unconnected_Socket : GNAT.Sockets.Socket_Type;
