@@ -1,9 +1,10 @@
 pragma Ada_2012;
 
-with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with GNAT.Sockets;
+
+with D_Bus.Logging; use D_Bus.Logging;
 
 package body D_Bus.Dispatching is
 
@@ -88,14 +89,14 @@ package body D_Bus.Dispatching is
                         end if;
                      end if;
                   end;
-                  Ada.Text_IO.Put_Line ("TODO didn't find obj or dispatcher");
+                  Log (Warning, "TODO no obj or dispatcher found");
                   <<Done>>
                when Signal =>
-                  null; --  TODO
+                  Log (Error, "TODO signals unimplemented by dispatcher");
                when Method_Return | Error =>
                   null;
                when Invalid =>
-                  raise Program_Error; --  TODO possible?
+                  raise Program_Error; --  Note: Checked by Read_RMH
             end case;
          end;
       end loop;

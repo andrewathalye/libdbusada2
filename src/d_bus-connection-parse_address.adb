@@ -3,13 +3,13 @@ pragma Ada_2012;
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Directories;
 with Ada.Environment_Variables;
-with Ada.Exceptions;
 with Ada.Strings.Fixed;
 with Ada.Strings.Hash;
+with Ada.Strings.Maps;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
-
 with Ada.Unchecked_Conversion;
+
 with GNAT.OS_Lib;
 
 with GNATCOLL.OS.FS;
@@ -17,6 +17,7 @@ with GNATCOLL.OS.Process;
 
 with D_Bus.Platform;
 with D_Bus.Encodings;
+with D_Bus.Logging; use D_Bus.Logging;
 
 function D_Bus.Connection.Parse_Address
   (Mode : Mode_Type; Addr : D_Bus.Types.Extra.Server_Address)
@@ -29,9 +30,13 @@ is
    --  These are the server transport protocols that we support.
    --  Nonce-Tcp is not supported.
 
-   --  TODO handle connect failure
-   function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type;
-   function Try_Address (Addr : String) return GNAT.Sockets.Socket_Type is
+   function Try_Address
+     (Addr : D_Bus.Types.Extra.Server_Address) return GNAT.Sockets.Socket_Type;
+   --  Try to convert an address specification (single address) to a socket
+
+   function Try_Address
+     (Addr : D_Bus.Types.Extra.Server_Address) return GNAT.Sockets.Socket_Type
+   is
       use Ada.Strings.Unbounded;
       use D_Bus.Encodings;
 
@@ -126,6 +131,8 @@ is
       --  Note Compiler will warn if it is possible for these to be
       --  uninitialised.
    begin
+      Log (Info, "Parse address " & Addr);
+
       --  Try to parse the transport
       begin
          Transport := Server_Transport'Value (Transport_Name);
@@ -137,6 +144,7 @@ is
 
       --  Create a socket based upon the transport method
       case Transport is
+         --  TODO needs testing!
          when Unix =>
             Family := Family_Unix;
 
@@ -190,6 +198,7 @@ is
                   end if;
             end case;
 
+            --  TODO needs testing!
          when Launchd =>
             Family := Family_Unix;
 
@@ -216,7 +225,7 @@ is
                         --  Blocking `Run` until error or completion
                         Args.Append ("launchctl");
                         Args.Append ("getenv");
-                        Args.Append ("Env");
+                        Args.Append (Env);
 
                         Result :=
                           GNATCOLL.OS.Process.Run
@@ -229,7 +238,6 @@ is
                              " to get socket path.";
                         end if;
 
-                        --  TODO do we have to worry about newlines’
                         Address := Unix_Socket_Address (To_String (Result));
                      end;
 
@@ -246,6 +254,7 @@ is
                end case;
             end;
 
+            --  TODO needs testing!
          when Systemd =>
             Family := Family_Unix;
 
@@ -270,6 +279,7 @@ is
                   return GNAT.Sockets.To_Ada (3);
             end case;
 
+            --  TODO needs testing!
          when Tcp =>
             if not Has_Key ("host") then
                raise Address_Error with "Transport 'tcp' requires 'host'";
@@ -322,6 +332,7 @@ is
                end case;
             end;
 
+            --  TODO needs testing!
          when Unixexec =>
             Family := Family_Unix;
 
@@ -385,6 +396,7 @@ is
                     with "Transport 'unixexec' not listenable";
             end case;
 
+            --  TODO needs testing
          when Autolaunch =>
             declare
                Info_File : Unbounded_String;
@@ -392,10 +404,25 @@ is
                --  Try using the environment variable DBUS_SESSION_BUS_ADDRESS
                if Ada.Environment_Variables.Exists ("DBUS_SESSION_BUS_ADDRESS")
                then
-                  return
-                    Try_Address
-                      (Ada.Environment_Variables.Value
-                         ("DBUS_SESSION_BUS_ADDRESS"));
+                  declare
+                     Env_Addr : constant String :=
+                       Ada.Environment_Variables.Value
+                         ("DBUS_SESSION_BUS_ADDRESS");
+                  begin
+                     if Env_Addr in D_Bus.Types.Extra.Server_Address then
+                        return
+                          Try_Address
+                            (Ada.Environment_Variables.Value
+                               ("DBUS_SESSION_BUS_ADDRESS"));
+                     else
+                        pragma Style_Checks ("-M");
+                        Log
+                          (Warning,
+                           "Found environment variable DBUS_SESSION_BUS_ADDRESS with invalid contents '" &
+                           Env_Addr & "'");
+                        pragma Style_Checks (On);
+                     end if;
+                  end;
                end if;
 
                --  If it doesn't exist, load from session file
@@ -420,8 +447,12 @@ is
                Append
                  (Info_File, To_Hex (String (D_Bus.Platform.Get_Machine_ID)));
 
-               --  Append display name if we can locate it
-               --  TODO move elsewhere?
+               --  Note:
+               --  Append display name if we can locate it.
+               --  An invalid format will not cause a crash.
+               --
+               --  Failure to determine display means that the file we use will be
+               --  valid user-wide, rather than just for the current display.
                if Ada.Environment_Variables.Exists ("DISPLAY") then
                   Append (Info_File, "-");
                   declare
@@ -438,16 +469,13 @@ is
                      if Dot = 0 then
                         Dot := Cut_Display'Last + 1;
                      end if;
-                     Append (Info_File, Cut_Display (1 .. Dot - 1));
+                     Append
+                       (Info_File, Cut_Display (Cut_Display'First .. Dot - 1));
                   end;
                end if;
-               --  Note: No error if we can't determine display, it just
-               --  means this will be a user-wide address.
-
-               Ada.Text_IO.Put_Line
-                 ("TODO debug use info file " & To_String (Info_File));
 
                --  Check whether the file and/or directory exist
+               Log (Info, "Load autolaunch data from " & To_String (Info_File));
                if not Ada.Directories.Exists (To_String (Info_File)) then
                   case Mode is
                      when Connect =>
@@ -476,8 +504,11 @@ is
                         is
                            use Ada.Text_IO;
 
-                           File   : File_Type;
-                           Result : Declaration_Maps.Map;
+                           Single_Quotes :
+                             constant Ada.Strings.Maps.Character_Set :=
+                             Ada.Strings.Maps.To_Set (''');
+                           File          : File_Type;
+                           Result        : Declaration_Maps.Map;
                         begin
                            Open (File, In_File, Path);
 
@@ -501,13 +532,20 @@ is
                                     end if;
 
                                     --  Insert key and value
-                                    --  No preprocessing is recommended in the
-                                    --  specification.
+                                    --  Note: although not specified, in practice
+                                    --  we need to remove single quotes from
+                                    --  the beginning and end of the value.
                                     Result.Insert
                                       (Key      =>
                                          Line (Line'First .. Key_Name_End - 1),
                                        New_Item =>
-                                         Line (Key_Name_End + 1 .. Line'Last));
+                                         Ada.Strings.Fixed.Trim
+                                           (Source =>
+                                              Line
+                                                (Key_Name_End + 1 ..
+                                                     Line'Last),
+                                            Left   => Single_Quotes,
+                                            Right  => Single_Quotes));
                                  end if;
                               end;
                            end loop;
@@ -537,15 +575,23 @@ is
                              with "TODO add restart impl when not running";
                         end if;
 
-                        --  Create socket
-                        Address :=
-                          Unix_Socket_Address
-                            (Declarations.Element
-                               ("DBUS_SESSION_BUS_ADDRESS"));
-                        goto Autolaunch_Complete;
-                     end;
+                        declare
+                           Found_Addr : constant String :=
+                             Declarations.Element ("DBUS_SESSION_BUS_ADDRESS");
+                        begin
+                           if Found_Addr not in
+                               D_Bus.Types.Extra.Server_Address
+                           then
+                              raise Transport_Error
+                                with "Connectable transport 'autolaunch' failed to connect to address '" &
+                                Found_Addr & "'";
+                           end if;
 
+                           return Try_Address (Found_Addr);
+                        end;
+                     end;
                   when Listen =>
+                     <<Try_Again>>
                      declare
                         use Ada.Text_IO;
                         File        : File_Type;
@@ -555,6 +601,11 @@ is
                           Random_Filename & ".sock";
 
                      begin
+                        --  Try again if the socket path already exists
+                        if Ada.Directories.Exists (Socket_Path) then
+                           goto Try_Again;
+                        end if;
+
                         --  Create info file
                         Ada.Text_IO.Create
                           (File, Out_File, To_String (Info_File));
@@ -573,20 +624,14 @@ is
                               Side   => Ada.Strings.Left));
                         Ada.Text_IO.Close (File);
 
-                        --  Create socket
-                        --  TODO solve issue if name already exists
-                        --  TODO also clean up after terminate (elsewhere)
+                        --  Set socket address
                         Address := Unix_Socket_Address (Socket_Path);
-                        goto Autolaunch_Complete;
                      end;
                end case;
-
-               <<Autolaunch_Complete>>
             end;
       end case;
 
       --  Make a socket and return
-      --  TODO handle connect failure
       declare
          Socket : Socket_Type;
       begin
@@ -605,16 +650,9 @@ is
    exception
       --  Avoid propagating an exception (is slow)
       --  Instead print message and return null socket
-      when X : Transport_Error =>
-         declare
-            use Ada.Text_IO;
-            use Ada.Exceptions;
-         begin
-            Put_Line
-              (Standard_Error,
-               "[D-Bus][Connection] " & Addr & " " & Exception_Message (X));
-            return GNAT.Sockets.No_Socket;
-         end;
+      when X : Transport_Error | Socket_Error =>
+         Log (Error, X);
+         return GNAT.Sockets.No_Socket;
    end Try_Address;
 
    Group_Start : Positive := Addr'First;
@@ -645,7 +683,7 @@ begin
 
    if GNAT.Sockets.Is_Empty (Result) then
       raise Transport_Error
-        with "The provided address '" & Addr & "' could not be parsed.";
+        with "Unable to connect to any addresses in '" & Addr & "'";
    end if;
 
    return R : Socket_Set_Type do

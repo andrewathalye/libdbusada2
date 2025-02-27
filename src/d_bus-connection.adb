@@ -1,14 +1,13 @@
 pragma Ada_2012;
 
 with Ada.IO_Exceptions;
-with Ada.Text_IO;
 with Ada.Real_Time;
 with Ada.Numerics.Discrete_Random;
 
 with D_Bus.Connection.Parse_Address;
 with D_Bus.Connection.Try_Authenticate;
-
 with D_Bus.Platform;
+with D_Bus.Logging; use D_Bus.Logging;
 
 package body D_Bus.Connection is
    ---------------
@@ -195,14 +194,15 @@ package body D_Bus.Connection is
 
          Result.UUID := New_UUID;
 
-         Ada.Text_IO.Put_Line
-           ("Accept connection from client TODO" &
-            GNAT.Sockets.Image (Client_Addr));
+         Log
+           (Warning,
+            ("Accept connection from client TODO" &
+             GNAT.Sockets.Image (Client_Addr)));
 
          --  No need to separately close Unconnected_Socket?
          --  TODO
          if D_Bus.Connection.Try_Authenticate (Listen, Result) then
-            Ada.Text_IO.Put_Line ("Authenticate success TODO");
+            Log (Warning, "Authenticate success TODO");
             exit;
          else
             GNAT.Sockets.Close_Socket (Result.Socket);

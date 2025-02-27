@@ -3,10 +3,10 @@ pragma Ada_2012;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
-with Ada.Text_IO;
 
 with D_Bus.Encodings;
 with D_Bus.Platform;
+with D_Bus.Logging; use D_Bus.Logging;
 
 function D_Bus.Connection.Try_Authenticate
   (Mode : Mode_Type; C : in out Connection) return Boolean
@@ -50,7 +50,7 @@ is
           (Ada.Streams.Stream_Element_Offset (Buffer'First) ..
                Ada.Streams.Stream_Element_Offset (Buffer'Last));
    begin
-      Ada.Text_IO.Put_Line (Buffer);
+      Log (Info, Buffer);
 
       for I in Buffer'Range loop
          SEA_Buffer (Ada.Streams.Stream_Element_Offset (I)) :=
@@ -97,7 +97,7 @@ is
             String_View (Natural (I)) := Convert (Buffer (I));
          end loop;
 
-         Ada.Text_IO.Put_Line (String_View);
+         Log (Info, String_View);
 
          --  Split command and parameters
          Command_End := Ada.Strings.Fixed.Index (String_View, " ");
@@ -296,7 +296,8 @@ is
                   D_Bus.Platform.Write_Credentials (C.Socket);
                exception
                   when D_Bus.Platform.Credentials_Error =>
-                     Ada.Text_IO.Put_Line ("TODO could not send creds");
+                     Log
+                       (Info, "Unable to send credentials to remote server.");
                      Null_Byte (Connect);
                end;
 

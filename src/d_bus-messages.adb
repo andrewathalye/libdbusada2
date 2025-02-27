@@ -341,6 +341,8 @@ package body D_Bus.Messages is
       --  TODO support other endianness values
 
       Message_Type'Read (Stream, Item.M_Type);
+      Assert_Or_Protocol_Error (Item.M_Type /= Invalid);
+
       Message_Flags'Read (Stream, Item.Flags);
 
       Interfaces.Unsigned_8'Read (Stream, Item.Protocol_Version);
