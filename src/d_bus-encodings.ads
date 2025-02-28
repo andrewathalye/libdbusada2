@@ -19,5 +19,5 @@ package D_Bus.Encodings is
    --  normal byte-strings. An exception will be
    --  raised if the input to From_Hex is not hex encoded.
    --
-   --  TODO raise Invalid_Encoding
+   --  Raise `Invalid_Encoding` if format is invalid.
 end D_Bus.Encodings;

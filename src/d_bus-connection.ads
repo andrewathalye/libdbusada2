@@ -17,20 +17,26 @@ package D_Bus.Connection is
    -- Base Operations --
    ---------------------
    type Connection is limited private;
-   --  Represents a D-Bus connection. This object must
-   --  not be copied and TODO is not thread-safe.
+   --  Represents a D-Bus connection. This object may not be copied and
+   --  must not be used by more than one task at a time.
+   --
+   --  Call `Move` to replace one connection with another.
+   --  This is the recommended way to take ownership of a connection
+   --  from another task, instead of using access types.
 
-   function Connected (C : Connection) return Boolean;
+   function Is_Connected (C : Connection) return Boolean;
+   --  Returns whether `C` refers to an active D-Bus connection.
 
    subtype Connected_Connection is Connection with
-       Dynamic_Predicate => Connected (Connected_Connection);
+       Dynamic_Predicate => Is_Connected (Connected_Connection);
 
-   -------------------
-   -- Compatibility --
-   -------------------
-   function FD_Transfer_Support (C : Connected_Connection) return Boolean;
-   --  Check whether `C` supports UNIX File Descriptor transfers.
-   --  This requires support at both ends of the connection.
+   procedure Move (Input : in out Connection; Output : out Connection) with
+     Pre =>
+      Input in Connected_Connection and Output not in Connected_Connection;
+   --  Copy all data from `Input` into `Output` and clear `Input.
+   --
+   --  `Input` must be a `Connected_Connection`
+   --  `Output` must not be a `Connected_Connection`
 
    ---------------------
    -- Message Support --
@@ -44,10 +50,10 @@ package D_Bus.Connection is
 
    procedure Receive
      (C : aliased Connection; M : out D_Bus.Messages.Message) with
-     Pre => Connected (C);
+     Pre => Is_Connected (C);
    --  Receive a message from connection `C`
 
-   function Check
+   function Can_Read
      (C : Connected_Connection; Timeout : GNAT.Sockets.Selector_Duration)
       return Boolean;
    --  Returns `True` if there is data to be read from `C` and `False`
@@ -83,8 +89,8 @@ package D_Bus.Connection is
      (Address : D_Bus.Types.Extra.Server_Address := Session_Bus)
       return Connected_Connection;
    --  Connect `C` to one of the servers listed in `Address`
-   --  Once connected, you must complete a handshake with the remote server.
-   --  TODO
+   --  Once connected, you may still need to complete a handshake with
+   --  the server iff `Address` refers to a message bus.
 
    function Listen
      (Address : D_Bus.Types.Extra.Server_Address) return Connected_Connection;
@@ -134,16 +140,22 @@ private
 
    type Connection is record
       Socket          : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
-      UUID            : D_Bus.Types.UUID;
+      UUID            : D_Bus.Types.UUID := (others => Character'First);
       Unix_Fd_Support : Boolean                  := False;
    end record;
 
    type Mode_Type is (Connect, Listen);
 
+   -------------------
+   -- Compatibility --
+   -------------------
+   function FD_Transfer_Support (C : Connected_Connection) return Boolean;
+   --  Check whether `C` supports UNIX File Descriptor transfers.
+   --  This requires support at both ends of the connection.
+
    ------------------
    -- Random UUIDs --
    ------------------
    function New_UUID return D_Bus.Types.UUID;
-   --  Seeded by library-level elaboration
-   --  TODO not thread-safe?
+   --  Task-safe function to generate a random UUID
 end D_Bus.Connection;

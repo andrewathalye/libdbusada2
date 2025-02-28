@@ -59,10 +59,16 @@ package body D_Bus.Encodings is
    function From_Hex (Byte : Hex_Byte) return Character is
       use type Interfaces.Unsigned_8;
 
-      Numeric1 : constant Numeric_Hex_Octet := To_Numeric (Byte (1));
-      Numeric2 : constant Numeric_Hex_Octet := To_Numeric (Byte (2));
+      --  First and second octets
+      O1 : constant Numeric_Hex_Octet := To_Numeric (Byte (1));
+      O2 : constant Numeric_Hex_Octet := To_Numeric (Byte (2));
    begin
-      return Character'Val (Interfaces.Shift_Left (Numeric1, 4) or Numeric2);
+      --  Check octet validity
+      if Byte (1) not in Hex_Octet or Byte (2) not in Hex_Octet then
+         raise Invalid_Encoding;
+      end if;
+
+      return Character'Val (Interfaces.Shift_Left (O1, 4) or O2);
    end From_Hex;
 
    --------------------

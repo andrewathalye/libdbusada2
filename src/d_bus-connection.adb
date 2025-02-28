@@ -13,11 +13,21 @@ package body D_Bus.Connection is
    ---------------
    -- Connected --
    ---------------
-   function Connected (C : Connection) return Boolean is
+   function Is_Connected (C : Connection) return Boolean is
       use type GNAT.Sockets.Socket_Type;
    begin
       return C.Socket /= GNAT.Sockets.No_Socket;
-   end Connected;
+   end Is_Connected;
+
+   ----------
+   -- Move --
+   ----------
+   procedure Move (Input : in out Connection; Output : out Connection)
+   is
+   begin
+      Output := Input;
+      Input := (others => <>);
+   end Move;
 
    -------------
    -- Streams --
@@ -105,7 +115,7 @@ package body D_Bus.Connection is
       D_Bus.Messages.Read (S'Access, M);
    end Receive;
 
-   function Check
+   function Can_Read
      (C : Connected_Connection; Timeout : GNAT.Sockets.Selector_Duration)
       return Boolean
    is
@@ -120,7 +130,7 @@ package body D_Bus.Connection is
          W_Socket_Set => W_Set, Status => Status, Timeout => Timeout);
 
       return Status = GNAT.Sockets.Completed;
-   end Check;
+   end Can_Read;
 
    -----------------
    -- FD Transfer --
@@ -132,13 +142,48 @@ package body D_Bus.Connection is
    -- Random Numbers --
    --------------------
    package Character_Random is new Ada.Numerics.Discrete_Random (Character);
-   Generator : Character_Random.Generator;
+   protected Protected_Random_UUID is
+      procedure Next_UUID (U : out D_Bus.Types.UUID);
+   private
+      Generator : Character_Random.Generator;
+      Seeded    : Boolean := False;
+   end Protected_Random_UUID;
+
+   protected body Protected_Random_UUID is
+      procedure Seed is
+         use Ada.Real_Time;
+         Seconds : Seconds_Count;
+         TS      : Time_Span;
+
+         type Unsigned_Seconds is mod 2**Seconds_Count'Size;
+         type Unsigned_Integer is mod 2**Integer'Size / 2;
+         Seed : Integer;
+      begin
+         Split (Clock, Seconds, TS);
+         Seed :=
+           Integer
+             (Unsigned_Seconds (Seconds) and
+              Unsigned_Seconds (Unsigned_Integer'Last));
+         Character_Random.Reset (Generator, Seed);
+      end Seed;
+
+      procedure Next_UUID (U : out D_Bus.Types.UUID) is
+      begin
+         if not Seeded then
+            Seed;
+            Seeded := True;
+         end if;
+
+         for C of U loop
+            C := Character_Random.Random (Generator);
+         end loop;
+      end Next_UUID;
+   end Protected_Random_UUID;
+
    function New_UUID return D_Bus.Types.UUID is
       Tmp : D_Bus.Types.UUID;
    begin
-      for C of Tmp loop
-         C := Character_Random.Random (Generator);
-      end loop;
+      Protected_Random_UUID.Next_UUID (Tmp);
 
       return Tmp;
    end New_UUID;
@@ -223,22 +268,4 @@ package body D_Bus.Connection is
       GNAT.Sockets.Close_Socket (C.Socket);
       C.Socket := GNAT.Sockets.No_Socket;
    end Disconnect;
-begin
-   --  Seed random number generator
-   declare
-      use Ada.Real_Time;
-      Seconds : Seconds_Count;
-      TS      : Time_Span;
-
-      type Unsigned_Seconds is mod 2**Seconds_Count'Size;
-      type Unsigned_Integer is mod 2**Integer'Size / 2;
-      Seed : Integer;
-   begin
-      Split (Clock, Seconds, TS);
-      Seed :=
-        Integer
-          (Unsigned_Seconds (Seconds) and
-           Unsigned_Seconds (Unsigned_Integer'Last));
-      Character_Random.Reset (Generator, Seed);
-   end;
 end D_Bus.Connection;

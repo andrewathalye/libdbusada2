@@ -18,5 +18,12 @@ Development plans live in /plans.txt
 When compiling for Mac, specify -XOS=Darwin on the command line.
 Otherwise it will assume 'unix' and fail to find a machine id
 
-TODO we need to remove Ada 2022 code where not necessary, since
-compiler support is not there yet.
+Status
+------
+On Linux you can now connect to a message bus via UNIX / Autolaunch and exchange messages.
+Not yet tested is TCP / Systemd / Launchd transports
+In progress is a dispatch table implementation that supports signals
+In progress also is type interning, right now we’re leaking memory
+Not yet implemented is file descriptor passing, but the infrastructure is there (~30 min of work max)
+Final step is adding support for the previously-written dbus binding generator for high level uses.
+This library intentionally is low-level except for type handling.
