@@ -2,12 +2,12 @@ pragma Ada_2012;
 
 with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
+with D_Bus.Errors;
 with System;
 
 with GNAT.Sockets;
 
 with D_Bus.Logging; use D_Bus.Logging;
-with System.Address_Image;
 
 package body D_Bus.Dispatching is
 
@@ -15,9 +15,16 @@ package body D_Bus.Dispatching is
    -- Dispatch Table Management --
    -------------------------------
    function Create
-     (Connection : in out D_Bus.Connection.Connected_Connection)
-      return Dispatch_Table
+     (Connection : in out D_Bus.Connection.Connection) return Dispatch_Table
    is
+   begin
+      return Table : aliased Dispatch_Table do
+         D_Bus.Connection.Move (Connection, Table.Connection);
+      end return;
+   end Create;
+
+   function Create return Dispatch_Table is
+      Connection : D_Bus.Connection.Connection := D_Bus.Connection.Connect;
    begin
       return Table : aliased Dispatch_Table do
          D_Bus.Connection.Move (Connection, Table.Connection);
@@ -34,6 +41,38 @@ package body D_Bus.Dispatching is
    ------------------------
    -- Message Management --
    ------------------------
+   procedure Try_Send_Error
+     (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message;
+      Name  :        String; Description : String := "");
+   --  Send an error with data `Description` and identity `Name` to the sender
+   --  of `Message` iff it expects a reply.
+
+   procedure Try_Send_Error
+     (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message;
+      Name  :        String; Description : String := "")
+   is
+      use D_Bus.Messages;
+
+      E    : D_Bus.Messages.Message;
+      List : D_Bus.Types.Argument_List;
+   begin
+      if not Flags (Message).No_Reply_Expected then
+         Log (Info, "Send Error: " & Name & " " & Description);
+         E :=
+           Compose_Error
+             (Error       => Name, Reply_To => Message,
+              Destination => Sender (Message));
+
+         if Description'Length > 0 then
+            List.Append (D_Bus.Types.Basic.Strings."+" (Description));
+            Add_Arguments (E, List);
+         end if;
+
+         D_Bus.Connection.Send (Table.Connection, E);
+      else
+         Log (Info, "Skip Error: " & Name & " " & Description);
+      end if;
+   end Try_Send_Error;
 
    procedure Dispatch
      (Table : in out Dispatch_Table; Timeout : GNAT.Sockets.Selector_Duration);
@@ -44,58 +83,64 @@ package body D_Bus.Dispatching is
    is
       use D_Bus.Messages;
 
-      M       : D_Bus.Messages.Message;
-      Handled : Boolean := False;
+      M : D_Bus.Messages.Message;
+
    begin
+      Log (Info, "Dispatch called. Wait for data.");
+
       --  Get all available messages
       --  Wait at most `Timeout`
       if D_Bus.Connection.Can_Read (Table.Connection, Timeout) then
          while D_Bus.Connection.Can_Read (Table.Connection, 0.0) loop
             D_Bus.Connection.Receive (Table.Connection, M);
-            Table.Receive.Append (M);
+            Table.Messages.Append (M);
          end loop;
       end if;
 
       --  Iterate over list without using cursors
-      --  The size of the list is likely to change
-      --  while we iterate.
-      while not Table.Receive.Is_Empty loop
+      while not Table.Messages.Is_Empty loop
          --  It is permissible to recursively call into Dispatch.
-         --  This guarantees that the next call will see a fresh message
-         M := Table.Receive.First_Element;
-         Table.Receive.Delete_First;
+         --  Reserve the first message as ours
+         M := Table.Messages.First_Element;
+         Table.Messages.Delete_First;
 
+         --  Send any replies to a different queue
+         --  Handle method calls and signals
          case M_Type (M) is
             when Method_Call =>
-               if Table.Objects.Contains (Path (M))
-                 and then Table.Dispatchers.Contains (M_Interface (M))
-               then
-                  declare
-                     O_R : constant Object_Record_SP.Ref :=
-                       Table.Objects (Path (M));
-                     D_R : constant Dispatcher_Record    :=
-                       Table.Dispatchers (M_Interface (M));
-                  begin
-                     D_R.Wrapper (Table, D_R.Actual, O_R.Get, M);
-                  end;
+               if Table.Objects.Contains (Path (M)) then
+                  if Table.Dispatchers.Contains (M_Interface (M)) then
+                     declare
+                        O_R : constant Object_Record_SP.Ref :=
+                          Table.Objects (Path (M));
+                        D_R : constant Dispatcher_Record    :=
+                          Table.Dispatchers (M_Interface (M));
+                     begin
+                        Log
+                          (Info,
+                           "Call Dispatcher: " & String (M_Interface (M)) &
+                           " @ " & String (Path (M)));
+                        D_R.Wrapper (Table, D_R.Actual, O_R.Get, M);
+                     end;
+                  else
+                     Log (Info, "No Dispatcher: " & String (M_Interface (M)));
+                     Try_Send_Error
+                       (Table, M, D_Bus.Errors.Unknown_Interface,
+                        String (M_Interface (M)));
+                  end if;
                else
-                  Log
-                    (Error,
-                     "TODO we don't yet return an error message for this");
+                  Log (Info, "No Object: " & String (Path (M)));
+                  Try_Send_Error
+                    (Table, M, D_Bus.Errors.Unknown_Object, String (Path (M)));
                end if;
-            when Method_Return | Error =>
-               null;
             when Signal =>
-               Log (Error, "TODO We do not yet handle signals!");
-               Handled := True;
+               Table.Signals.Append (M);
+               Log (Error, "TODO we don’t handle signals yet");
+            when Method_Return | Error =>
+               Table.Replies.Append (M);
             when Invalid =>
-               raise Program_Error;
+               raise Protocol_Error;
          end case;
-
-         --  Return the message to the front if we could not process.
-         if not Handled then
-            Table.Receive.Prepend (M);
-         end if;
       end loop;
    end Dispatch;
 
@@ -108,20 +153,24 @@ package body D_Bus.Dispatching is
       Sent   : D_Bus.Messages.Message := Message;
       Cursor : Message_Lists.Cursor   := Message_Lists.No_Element;
    begin
+      Log (Info, "Send message and await reply");
+
+      --  TODO does this create race conditions?
+      --  probably, if another random message arrives
+      Dispatch (Table, 0.0);
       D_Bus.Connection.Send (Table.Connection, Sent);
 
       --  Update table
       --  Interactive authentication messages must be given longer
-      --  TODO is this sufficient? what if another random message arrives?
-      if D_Bus.Messages.Flags (Message).Allow_Interactive_Authentication then
+      if D_Bus.Messages.Flags (Sent).Allow_Interactive_Authentication then
          Dispatch (Table, 120.0);
       else
          Dispatch (Table, 2.0);
       end if;
 
-      --  Try to find the reply
-      for C in Table.Receive.Iterate loop
-         if D_Bus.Messages.Is_Reply (Message, Message_Lists.Element (C)) then
+      --  Try to find a reply
+      for C in Table.Replies.Iterate loop
+         if D_Bus.Messages.Is_Reply (Sent, Message_Lists.Element (C)) then
             Cursor := C;
             exit;
          end if;
@@ -136,7 +185,7 @@ package body D_Bus.Dispatching is
       return
         M : constant D_Bus.Messages.Message := Message_Lists.Element (Cursor)
       do
-         Table.Receive.Delete (Cursor);
+         Table.Replies.Delete (Cursor);
       end return;
    end Send;
 
@@ -145,6 +194,7 @@ package body D_Bus.Dispatching is
    is
       Sent : D_Bus.Messages.Message := Message;
    begin
+      Log (Info, "Send message without waiting for reply");
       D_Bus.Connection.Send (Table.Connection, Sent);
    end Send;
 
@@ -237,6 +287,7 @@ package body D_Bus.Dispatching is
             O_RSP : Object_Record_SP.Ref;
          begin
             O_R.Alias   := As_Abstract_Object_Access (new Object_Type);
+            O_R.Tag     := Tag_Check'Tag;
             O_R.Release := As_Release_Function (Release_AOA'Address);
             O_RSP.Set (O_R);
 
@@ -245,29 +296,30 @@ package body D_Bus.Dispatching is
       end Create_Object;
 
       procedure Dispatch_Transformer
-        (Table  : access Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-         Object : Object_Record; M : D_Bus.Messages.Message);
+        (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+         Object :        Object_Record; M : D_Bus.Messages.Message);
 
       procedure Dispatch_Transformer
-        (Table  : access Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-         Object : Object_Record; M : D_Bus.Messages.Message)
+        (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+         Object :        Object_Record; M : D_Bus.Messages.Message)
       is
          use type Ada.Tags.Tag;
       begin
-         Log
-           (Info,
-            "Redirecting to real dispatcher at " &
-            System.Address_Image (Dispatcher.all'Address));
-
-         --  TODO test if this works as expected
+         --  Prevent calling dispatchers with invalid object types
+         --  Note IMPORTANT SAFETY FEATURE
          if Object.Tag /= Tag_Check'Tag then
-            raise Ada.Tags.Tag_Error
-              with "Dispatcher cannot handle " &
-              Ada.Tags.Expanded_Name (Object.Tag);
+            Log
+              (Warning,
+               "Type Error: " & Ada.Tags.Expanded_Name (Object.Tag) & " /= " &
+               Ada.Tags.Expanded_Name (Tag_Check'Tag));
+            Try_Send_Error
+              (Table, M, D_Bus.Errors.Not_Supported,
+               "Object incompatible with interface.");
+            return;
          end if;
 
          As_Dispatcher_Type (Dispatcher)
-           (Table => Table.all, Object => As_Object_Access (Object.Alias).all,
+           (Table   => Table, Object => As_Object_Access (Object.Alias).all,
             Message => M);
       end Dispatch_Transformer;
 

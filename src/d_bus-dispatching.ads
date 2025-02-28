@@ -14,7 +14,6 @@ private with GNATCOLL.Refcount;
 
 package D_Bus.Dispatching is
    pragma Assertion_Policy (Pre => Check);
-   pragma Assertion_Policy (Dynamic_Predicate => Check);
 
    -------------------------------
    -- Dispatch Table Management --
@@ -30,10 +29,14 @@ package D_Bus.Dispatching is
    --  connection will simply raise an exception.
 
    function Create
-     (Connection : in out D_Bus.Connection.Connected_Connection)
-      return Dispatch_Table;
+     (Connection : in out D_Bus.Connection.Connection)
+      return Dispatch_Table with
+     Pre => Connection in D_Bus.Connection.Connected_Connection;
    --  Create a new dispatch table, consuming `Connection` and assigning it
    --  to the table. `Connection` will no longer be usable after this process.
+
+   function Create return Dispatch_Table;
+   --  Create a new dispatch table using the default session bus.
 
    procedure Destroy
      (Table      : out Dispatch_Table;
@@ -47,18 +50,25 @@ package D_Bus.Dispatching is
    -- Message Management --
    ------------------------
    No_Reply : exception;
+   use type D_Bus.Messages.Message_Type;
    function Send
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message)
       return D_Bus.Messages.Message with
-     Pre => not D_Bus.Messages.Flags (Message).No_Reply_Expected;
+     Pre =>
+      D_Bus.Messages.M_Type (Message) = D_Bus.Messages.Method_Call and
+      not D_Bus.Messages.Flags (Message).No_Reply_Expected;
    --  Sends `Message` via `Table` and return its reply.
    --
    --  Raise `No_Reply` if no reply was received after an
    --  implementation-defined amount of time.
 
+   --  TODO provide some mechanism for signals
+
    procedure Send
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message) with
-     Pre => D_Bus.Messages.Flags (Message).No_Reply_Expected;
+     Pre =>
+      D_Bus.Messages.M_Type (Message) /= D_Bus.Messages.Method_Call or
+      D_Bus.Messages.Flags (Message).No_Reply_Expected;
    --  Sends `Message` via `Table`
    --  It is an error to call this with a message that expects a reply.
 
@@ -138,7 +148,7 @@ private
 
    type Object_Record is record
       Alias   : Abstract_Object_Access;
-      Tag     : Ada.Tags.Tag;
+      Tag     : Ada.Tags.Tag := Ada.Tags.No_Tag;
       Release : Release_Function;
    end record;
 
@@ -184,7 +194,9 @@ private
 
    type Dispatch_Table is limited record
       Connection  : aliased D_Bus.Connection.Connection;
-      Receive     : Message_Lists.List;
+      Messages    : Message_Lists.List;
+      Replies     : Message_Lists.List;
+      Signals     : Message_Lists.List;
       Objects     : Object_Path_Maps.Map;
       Dispatchers : Dispatcher_Interface_Maps.Map;
    end record;

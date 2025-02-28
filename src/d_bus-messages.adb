@@ -246,6 +246,7 @@ package body D_Bus.Messages is
         Valid_Message_Serial
           (D_Bus.Types.Basic.Uint32s."+"
              (D_Bus.Types.Basic.Uint32 (Reply.Fields (F_Reply_Serial).Get)));
+
       return
         (not Original.Flags.No_Reply_Expected)
         and then Original.Serial = Reply_RS;
