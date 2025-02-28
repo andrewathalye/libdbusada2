@@ -1,15 +1,15 @@
 pragma Ada_2012;
 
-with Ada.Containers.Doubly_Linked_Lists;
-with Ada.Strings;
-with Ada.Strings.Hash;
-with Ada.Tags;
 with D_Bus.Connection;
 with D_Bus.Messages;
 with D_Bus.Types.Basic;
 with D_Bus.Types.Extra;
 
+private with Ada.Containers.Doubly_Linked_Lists;
 private with Ada.Containers.Indefinite_Hashed_Maps;
+private with Ada.Strings.Hash;
+private with Ada.Tags;
+
 private with GNATCOLL.Refcount;
 
 package D_Bus.Dispatching is
@@ -19,33 +19,29 @@ package D_Bus.Dispatching is
    -------------------------------
    -- Dispatch Table Management --
    -------------------------------
-   type U_Dispatch_Table (<>) is limited private;
-   function Is_Valid (Table : U_Dispatch_Table) return Boolean;
-
-   subtype Dispatch_Table is U_Dispatch_Table with
-       Dynamic_Predicate => Is_Valid (Dispatch_Table);
+   type Dispatch_Table (<>) is limited private;
    --  Represents a data table containing
    --  associations between objects and paths
    --  and interfaces and handler functions.
 
+   --  Note: Trying to create a subtype for valid dispatch tables
+   --  caused a compiler crash, so instead the type is implemented
+   --  such that all values are 'valid' but using it without a
+   --  connection will simply raise an exception.
+
    function Create
-     (Connection : in out D_Bus.Connection.Connection)
-      return Dispatch_Table with
-     Pre => Connection in D_Bus.Connection.Connected_Connection;
+     (Connection : in out D_Bus.Connection.Connected_Connection)
+      return Dispatch_Table;
    --  Create a new dispatch table, consuming `Connection` and assigning it
    --  to the table. `Connection` will no longer be usable after this process.
-   --
-   --  `Connection` must be connected prior to creating a table.
-   --  TODO test and reconsider
 
    procedure Destroy
-     (Table      : out U_Dispatch_Table;
-      Connection : out D_Bus.Connection.Connection) with
-     Pre => Table in Dispatch_Table;
+     (Table      : out Dispatch_Table;
+      Connection : out D_Bus.Connection.Connection);
    --  Destroy all data held by `Table`.
-   --  `Connection` is returned to the caller
-   --  and may be used freely.
-   --  idem test and reconsider TODO
+   --  `Connection` is returned to the caller.
+   --
+   --  TODO automatically destroy on scope exit!
 
    ------------------------
    -- Message Management --
@@ -66,9 +62,13 @@ package D_Bus.Dispatching is
    --  Sends `Message` via `Table`
    --  It is an error to call this with a message that expects a reply.
 
-   --  procedure Dispatch (Table : in out Dispatch_Table);
+   procedure Dispatch (Table : in out Dispatch_Table);
    --  Reads all pending messages and dispatches them according to table rules.
    --  Will block until at least one message has been read.
+   --
+   --  It is permissible for a dispatcher to to modify `Table`
+   --  It is also permissible to recursively call D_Bus functions located on
+   --  a local machine from within a dispatcher.
 
    -----------------------
    -- Object Management --
@@ -95,9 +95,17 @@ package D_Bus.Dispatching is
    --
    --  Raise `No_Dispatcher` if no dispatcher was registered for `M_Interface`
 
+   -------------------------
+   -- Generic Dispatching --
+   -------------------------
    generic
       type Object_Type is limited private;
    package Generic_Dispatching is
+      --  The power of this package is in its ability to support _generic_
+      --  dispatching. Instantiate this package with any constrained
+      --  subtype and you will be able to add dispatchers and objects of
+      --  that type.
+
       procedure Create_Object
         (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path);
       --  Create an opaque object associated with `Path`.
@@ -108,8 +116,8 @@ package D_Bus.Dispatching is
 
       type Dispatcher_Type is
         access procedure
-          (Table   : Dispatch_Table; Object : in out Object_Type;
-           Message : D_Bus.Messages.Message);
+          (Table   : in out Dispatch_Table; Object : in out Object_Type;
+           Message :        D_Bus.Messages.Message);
       --  Takes a reference to an object and a copy of a message associated
       --   with that object.
 
@@ -151,13 +159,13 @@ private
 
    type Abstract_Dispatcher_Type is
      access procedure
-       (Table   : access Dispatch_Table; Object : in out Abstract_Object_Type;
-        Message : D_Bus.Messages.Message);
+       (Table   : in out Dispatch_Table; Object : in out Abstract_Object_Type;
+        Message :        D_Bus.Messages.Message);
 
    type Dispatch_Transformer is
      access procedure
-       (Table  : access Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-        Object : Object_Record; M : D_Bus.Messages.Message);
+       (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+        Object :        Object_Record; M : D_Bus.Messages.Message);
 
    type Dispatcher_Record is record
       Actual  : Abstract_Dispatcher_Type;
@@ -174,11 +182,9 @@ private
    package Message_Lists is new Ada.Containers.Doubly_Linked_Lists
      (D_Bus.Messages.Message);
 
-   type U_Dispatch_Table is limited record
-      Valid       : Boolean := False;
-      Self        : access Dispatch_Table;
+   type Dispatch_Table is limited record
       Connection  : aliased D_Bus.Connection.Connection;
-      Messages    : Message_Lists.List;
+      Receive     : Message_Lists.List;
       Objects     : Object_Path_Maps.Map;
       Dispatchers : Dispatcher_Interface_Maps.Map;
    end record;

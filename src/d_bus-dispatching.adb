@@ -14,91 +14,130 @@ package body D_Bus.Dispatching is
    -------------------------------
    -- Dispatch Table Management --
    -------------------------------
-   function Is_Valid (Table : U_Dispatch_Table) return Boolean is
-     (Table.Valid);
-
    function Create
-     (Connection : in out D_Bus.Connection.Connection) return Dispatch_Table
+     (Connection : in out D_Bus.Connection.Connected_Connection)
+      return Dispatch_Table
    is
    begin
-      return Result : aliased Dispatch_Table do
-         D_Bus.Connection.Move (Connection, Result.Connection);
-         Result.Self  := Result'Unchecked_Access;
-         Result.Valid := True;
+      return Table : aliased Dispatch_Table do
+         D_Bus.Connection.Move (Connection, Table.Connection);
       end return;
    end Create;
 
    procedure Destroy
-     (Table      : out U_Dispatch_Table;
-      Connection : out D_Bus.Connection.Connection)
+     (Table : out Dispatch_Table; Connection : out D_Bus.Connection.Connection)
    is
    begin
       D_Bus.Connection.Move (Table.Connection, Connection);
-      Table.Valid := False;
    end Destroy;
 
    ------------------------
    -- Message Management --
    ------------------------
-   procedure Update
+
+   procedure Dispatch
      (Table : in out Dispatch_Table; Timeout : GNAT.Sockets.Selector_Duration);
-   procedure Update
+   --  Internal variant of Dispatch with Timeout specification
+
+   procedure Dispatch
      (Table : in out Dispatch_Table; Timeout : GNAT.Sockets.Selector_Duration)
    is
-      M : D_Bus.Messages.Message;
+      use D_Bus.Messages;
+
+      M       : D_Bus.Messages.Message;
+      Handled : Boolean := False;
    begin
+      --  Get all available messages
+      --  Wait at most `Timeout`
       if D_Bus.Connection.Can_Read (Table.Connection, Timeout) then
          while D_Bus.Connection.Can_Read (Table.Connection, 0.0) loop
             D_Bus.Connection.Receive (Table.Connection, M);
-            Table.Messages.Append (M);
+            Table.Receive.Append (M);
          end loop;
       end if;
-   end Update;
+
+      --  Iterate over list without using cursors
+      --  The size of the list is likely to change
+      --  while we iterate.
+      while not Table.Receive.Is_Empty loop
+         --  It is permissible to recursively call into Dispatch.
+         --  This guarantees that the next call will see a fresh message
+         M := Table.Receive.First_Element;
+         Table.Receive.Delete_First;
+
+         case M_Type (M) is
+            when Method_Call =>
+               if Table.Objects.Contains (Path (M))
+                 and then Table.Dispatchers.Contains (M_Interface (M))
+               then
+                  declare
+                     O_R : constant Object_Record_SP.Ref :=
+                       Table.Objects (Path (M));
+                     D_R : constant Dispatcher_Record    :=
+                       Table.Dispatchers (M_Interface (M));
+                  begin
+                     D_R.Wrapper (Table, D_R.Actual, O_R.Get, M);
+                  end;
+               else
+                  Log
+                    (Error,
+                     "TODO we don't yet return an error message for this");
+               end if;
+            when Method_Return | Error =>
+               null;
+            when Signal =>
+               Log (Error, "TODO We do not yet handle signals!");
+               Handled := True;
+            when Invalid =>
+               raise Program_Error;
+         end case;
+
+         --  Return the message to the front if we could not process.
+         if not Handled then
+            Table.Receive.Prepend (M);
+         end if;
+      end loop;
+   end Dispatch;
 
    function Send
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message)
       return D_Bus.Messages.Message
    is
-      Sent    : D_Bus.Messages.Message := Message;
-      Timeout : GNAT.Sockets.Selector_Duration;
-      Cursor  : Message_Lists.Cursor   := Message_Lists.No_Element;
+      use type Message_Lists.Cursor;
 
-      function Search_Table return Boolean;
-      function Search_Table return Boolean is
-      begin
-         for C in Table.Messages.Iterate loop
-            if D_Bus.Messages.Is_Reply (Message, Message_Lists.Element (C))
-            then
-               Cursor := C;
-               return True;
-            end if;
-         end loop;
-
-         return False;
-      end Search_Table;
+      Sent   : D_Bus.Messages.Message := Message;
+      Cursor : Message_Lists.Cursor   := Message_Lists.No_Element;
    begin
       D_Bus.Connection.Send (Table.Connection, Sent);
 
-      if not Search_Table then
-         if D_Bus.Messages.Flags (Message).Allow_Interactive_Authentication
-         then
-            Timeout := 120.0;
-         else
-            Timeout := 2.0;
-         end if;
-         Update (Table, Timeout);
-
-         if not Search_Table then
-            raise No_Reply;
-         end if;
+      --  Update table
+      --  Interactive authentication messages must be given longer
+      --  TODO is this sufficient? what if another random message arrives?
+      if D_Bus.Messages.Flags (Message).Allow_Interactive_Authentication then
+         Dispatch (Table, 120.0);
+      else
+         Dispatch (Table, 2.0);
       end if;
 
+      --  Try to find the reply
+      for C in Table.Receive.Iterate loop
+         if D_Bus.Messages.Is_Reply (Message, Message_Lists.Element (C)) then
+            Cursor := C;
+            exit;
+         end if;
+      end loop;
+
+      --  Error out if no reply
+      if Cursor = Message_Lists.No_Element then
+         raise No_Reply;
+      end if;
+
+      --  Remove reply from queue and return
       return
         M : constant D_Bus.Messages.Message := Message_Lists.Element (Cursor)
       do
-         Table.Messages.Delete (Cursor);
+         Table.Receive.Delete (Cursor);
       end return;
-
    end Send;
 
    procedure Send
@@ -108,6 +147,11 @@ package body D_Bus.Dispatching is
    begin
       D_Bus.Connection.Send (Table.Connection, Sent);
    end Send;
+
+   procedure Dispatch (Table : in out Dispatch_Table) is
+   begin
+      Dispatch (Table, GNAT.Sockets.Forever);
+   end Dispatch;
 
    --------------------------------------
    -- Concrete Objects and Dispatchers --
