@@ -27,14 +27,27 @@ package D_Bus.Platform is
    function Is_Running
      (Handle : GNATCOLL.OS.Process.Process_Handle) return Boolean;
    --  Return true if there is a process running on the current machine
-   --  with the given handle (semantics differ by OS).
+   --  with the given handle.
 
-   procedure Read_FD
-     (Socket : GNAT.Sockets.Socket_Type; FD : out GNAT.OS_Lib.File_Descriptor);
-   procedure Write_FD
-     (Socket : GNAT.Sockets.Socket_Type; FD : GNAT.OS_Lib.File_Descriptor);
-   --  Read / write a file descriptor over a socket.
-   --  This may raise an exception if it is not supported.
+   File_Descriptor_Error : exception;
+   File_Descriptor_Destructive_Error : exception;
+   type FD_Array is
+     array (Positive range <>) of aliased GNAT.OS_Lib.File_Descriptor;
+
+   function Read_FDs (Socket : GNAT.Sockets.Socket_Type) return FD_Array;
+   --  Read an array of file descriptors from a socket.
+   --  Consumes a token describing the length of the file descriptor array.
+   --
+   --  On failure:
+   --  Raise `File_Descriptor_Error` if no data was consumed.
+   --  Raise `File_Descriptor_Destructive_Error` if data was consumed.
+
+   procedure Write_FDs (Socket : GNAT.Sockets.Socket_Type; FDs : FD_Array);
+   --  Pass an array of file descriptors over a socket.
+   --  Writes a token describing the length of the file descriptor array.
+   --
+   --  On failure:
+   --  Raise `File_Descriptor_Error` if no data was transferred.
 
    function FD_Transfer_Support (S : GNAT.Sockets.Socket_Type) return Boolean;
    --  Returns whether socket `S` supports transferring file descriptors
@@ -43,13 +56,15 @@ package D_Bus.Platform is
    Credentials_Error : exception;
    function Read_Credentials (S : GNAT.Sockets.Socket_Type) return String;
    --  Return the ID of the user who owns socket `S`.
+   --  This causes an authentication token to be consumed from `S`.
    --
-   --  Raise `Credentials_Error` on failure.
+   --  On failure:
+   --  Raise `Credentials_Error` if no data was consumed.
 
    procedure Write_Credentials (S : GNAT.Sockets.Socket_Type);
-   --  Send credentials over `S` to be verified by the recipient.
+   --  Send an authentication token over socket `S`
    --  Additionally sends a null byte.
    --
-   --  Raise `Credentials_Error` on failure.
-   --  On failure, does not write a null byte.
+   --  On failure:
+   --  Raise `Credentials_Error` if no data was transferred.
 end D_Bus.Platform;

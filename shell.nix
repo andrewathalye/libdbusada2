@@ -12,6 +12,8 @@ nix-ada.pkgs.mkShell {
       # Debugging and tests
       nix-ada.pkgs.gdb
       nix-ada.pkgs.socat
+      nix-ada.pkgs.clang-tools
+      nix-ada.pkgs.clang
 #      nix-ada.pkgs.gnatprove
 #      nix-ada.pkgs.lcov
 #      nix-ada.pkgs.valgrind
