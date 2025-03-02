@@ -107,10 +107,10 @@ is
              (Source => Transport_Props, Pattern => ",", From => V_Start);
 
          if V_End = 0 then
-            V_End := Transport_Props'Last;
+            V_End := Transport_Props'Last + 1;
          end if;
 
-         return Decode_Server_Address (Transport_Props (V_Start .. V_End));
+         return Decode_Server_Address (Transport_Props (V_Start .. V_End - 1));
       end Get_Value;
 
       function Has_Key (Key : String) return Boolean is
@@ -144,7 +144,6 @@ is
 
       --  Create a socket based upon the transport method
       case Transport is
-         --  TODO needs testing!
          when Unix =>
             Family := Family_Unix;
 
@@ -163,6 +162,7 @@ is
 
                   Address := Unix_Socket_Address (Get_Value ("path"));
                when Listen =>
+                  --  TODO needs testing
                   if Has_Key ("path") then
                      Address := Unix_Socket_Address (Get_Value ("path"));
                   elsif Has_Key ("dir") then
@@ -198,7 +198,6 @@ is
                   end if;
             end case;
 
-            --  TODO needs testing!
          when Launchd =>
             Family := Family_Unix;
 
@@ -238,9 +237,27 @@ is
                              " to get socket path.";
                         end if;
 
-                        Address := Unix_Socket_Address (To_String (Result));
+                        --  Data as read in contains line terminator
+                        declare
+                           CR_LF_Space :
+                             constant Ada.Strings.Maps.Character_Set :=
+                             Ada.Strings.Maps.To_Set
+                               (ASCII.CR & ASCII.LF & ' ');
+                        begin
+                           Address :=
+                             Unix_Socket_Address
+                               (Ada.Strings.Fixed.Trim
+                                  (To_String (Result), CR_LF_Space,
+                                   CR_LF_Space));
+                        end;
+                     exception
+                        when GNATCOLL.OS.OS_Error =>
+                           raise Transport_Error
+                             with "Connectable transport 'launchd' could" &
+                             " not call launchtl";
                      end;
 
+                     --  TODO needs testing
                   when Listen =>
                      if not Ada.Environment_Variables.Exists (Env) then
                         raise Transport_Error
@@ -279,7 +296,6 @@ is
                   return GNAT.Sockets.To_Ada (3);
             end case;
 
-            --  TODO needs testing!
          when Tcp =>
             if not Has_Key ("host") then
                raise Address_Error with "Transport 'tcp' requires 'host'";
@@ -289,50 +305,33 @@ is
                raise Address_Error with "Transport 'tcp' requires 'port'";
             end if;
 
-            if Has_Key ("family") then
-               if Get_Value ("family") = "ipv4" then
-                  Family := Family_Inet;
-               elsif Get_Value ("family") = "ipv6" then
-                  Family := Family_Inet6;
-               else
-                  raise Address_Error
-                    with "Transport 'tcp' does not accept specified 'family'";
-               end if;
-            else
-               --  One last attempt to identify IPv6 addresses
-               if GNAT.Sockets.Is_IPv6_Address (Get_Value ("host")) then
-                  Family := Family_Inet6;
-               else
-                  --  No family specified, IPv4 will have to do
-                  Family := Family_Inet;
-               end if;
-            end if;
-
-            --  Connect / Listen / Accept
+            --  Look up host, then Connect / Listen
             --  TODO see if this works with '*' as per spec
             declare
-               Host : constant String    := Get_Value ("host");
-               Port : constant Port_Type :=
-                 Port_Type'Value (Get_Value ("port"));
-            begin
-               case Mode is
-                  when Connect =>
-                     Address :=
-                       GNAT.Sockets.Network_Socket_Address
-                         (Addr => GNAT.Sockets.Inet_Addr (Host), Port => Port);
-                  when Listen =>
-                     --  Optionally use bind address for listener
-                     Address :=
-                       GNAT.Sockets.Network_Socket_Address
-                         (Addr =>
-                            GNAT.Sockets.Inet_Addr
-                              ((if Has_Key ("bind") then Get_Value ("bind")
-                                else Host)),
-                          Port => Port);
-               end case;
-            end;
+               Pref_Family : constant Family_Type :=
+                 (if Has_Key ("family") then
+                    (if Get_Value ("family") = "ipv4" then Family_Inet
+                     elsif Get_Value ("family") = "ipv6" then Family_Inet6
+                     else raise Transport_Error
+                         with "Transport 'tcp' does not support this family")
+                  else Family_Unspec);
 
-            --  TODO needs testing!
+               AIA : constant Address_Info_Array :=
+                 Get_Address_Info
+                   (Host    =>
+                      (if Has_Key ("bind") and Mode = Listen then
+                         Get_Value ("bind")
+                       else Get_Value ("host")),
+                    Service => Get_Value ("port"), Family => Pref_Family);
+            begin
+               if AIA'Length = 0 then
+                  raise Transport_Error
+                    with "Connectable transport 'tcp' found no addresses.";
+               end if;
+
+               Address := AIA (AIA'First).Addr;
+               Family  := Address.Family;
+            end;
          when Unixexec =>
             Family := Family_Unix;
 
@@ -382,21 +381,31 @@ is
                      end loop Add_Arguments;
 
                      --  Start process
-                     Discard :=
-                       GNATCOLL.OS.Process.Start
-                         (Args   => Arguments,
-                          Stdin  => Convert (GNAT.Sockets.To_C (Server)),
-                          Stdout => Convert (GNAT.Sockets.To_C (Server)));
+                     begin
+                        Discard :=
+                          GNATCOLL.OS.Process.Start
+                            (Args   => Arguments,
+                             Stdin  => Convert (GNAT.Sockets.To_C (Server)),
+                             Stdout => Convert (GNAT.Sockets.To_C (Server)));
+                     exception
+                        when GNATCOLL.OS.OS_Error =>
+                           raise Transport_Error
+                             with "Connectable transport 'unixexec' failed" &
+                             " to launch process.";
+                     end;
+
+                     --  We don't need the server socket
+                     GNAT.Sockets.Close_Socket (Server);
 
                      return Client;
                   end;
 
+                  --  TODO needs testing
                when Listen =>
                   raise Address_Error
                     with "Transport 'unixexec' not listenable";
             end case;
 
-            --  TODO needs testing
          when Autolaunch =>
             declare
                Info_File : Unbounded_String;
@@ -475,7 +484,8 @@ is
                end if;
 
                --  Check whether the file and/or directory exist
-               Log (Info, "Load autolaunch data from " & To_String (Info_File));
+               Log
+                 (Info, "Load autolaunch data from " & To_String (Info_File));
                if not Ada.Directories.Exists (To_String (Info_File)) then
                   case Mode is
                      when Connect =>
@@ -590,6 +600,7 @@ is
                            return Try_Address (Found_Addr);
                         end;
                      end;
+                  --  TODO needs testing
                   when Listen =>
                      <<Try_Again>>
                      declare
@@ -677,9 +688,6 @@ begin
       --  Update the start index
       Group_Start := Group_End + 1;
    end loop;
-
-   --  TODO we need to clean up sockets when done
-   --  not actually here though, in consumer code
 
    if GNAT.Sockets.Is_Empty (Result) then
       raise Transport_Error

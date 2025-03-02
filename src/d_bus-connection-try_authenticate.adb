@@ -118,7 +118,13 @@ is
                 (String_View (Command_End + 1 .. String_View'Last));
          end if;
 
-         return SASL_Command'Value ("C_" & String_View (1 .. Command_End - 1));
+         begin
+            return
+              SASL_Command'Value ("C_" & String_View (1 .. Command_End - 1));
+         exception
+            when Constraint_Error =>
+               raise Protocol_Error;
+         end;
       end;
    end SASL_Receive;
 

@@ -14,7 +14,7 @@ package body D_Bus.Encodings is
    -- Constants --
    ---------------
    Address_Safe_Bytes : constant GNAT.Regexp.Regexp :=
-     GNAT.Regexp.Compile ("[\-0-9A-Za-z_/.\*]");
+     GNAT.Regexp.Compile ("[\-0-9A-Za-z_/\.\*]");
 
    --------------
    -- Internal --
@@ -114,7 +114,7 @@ package body D_Bus.Encodings is
                Append
                  (Buffer,
                   Character'(From_Hex (Text (Index + 1 .. Index + 2))));
-               Index := Index + 2;
+               Index := Index + 3;
             when others =>
                if not GNAT.Regexp.Match
                    (String'(1 => Text (Index)), Address_Safe_Bytes)

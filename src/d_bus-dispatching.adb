@@ -16,7 +16,7 @@ package body D_Bus.Dispatching is
    -------------------------------
    procedure Create
      (Connection : in out D_Bus.Connection.Connection;
-      Table : out Dispatch_Table)
+      Table      :    out Dispatch_Table)
    is
    begin
       D_Bus.Connection.Move (Connection, Table.Connection);
@@ -38,15 +38,15 @@ package body D_Bus.Dispatching is
    end Create;
 
    procedure Destroy
-     (Table : in out Dispatch_Table;
-      Connection : out D_Bus.Connection.Connection)
+     (Table      : in out Dispatch_Table;
+      Connection :    out D_Bus.Connection.Connection)
    is
    begin
       D_Bus.Connection.Move (Table.Connection, Connection);
-      Table.Messages := Message_Lists.Empty_List;
-      Table.Replies := Message_Lists.Empty_List;
-      Table.Signals := Message_Lists.Empty_List;
-      Table.Objects := Object_Path_Maps.Empty_Map;
+      Table.Messages    := Message_Lists.Empty_List;
+      Table.Replies     := Message_Lists.Empty_List;
+      Table.Signals     := Message_Lists.Empty_List;
+      Table.Objects     := Object_Path_Maps.Empty_Map;
       Table.Dispatchers := Dispatcher_Interface_Maps.Empty_Map;
    end Destroy;
 
@@ -55,24 +55,24 @@ package body D_Bus.Dispatching is
    ------------------------
    procedure Try_Send_Error
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message;
-      Name : String; Description : String := "");
+      Name  :        String; Description : String := "");
    --  Send an error with data `Description` and identity `Name` to the sender
    --  of `Message` iff it expects a reply.
 
    procedure Try_Send_Error
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message;
-      Name : String; Description : String := "")
+      Name  :        String; Description : String := "")
    is
       use D_Bus.Messages;
 
-      E : D_Bus.Messages.Message;
+      E    : D_Bus.Messages.Message;
       List : D_Bus.Types.Argument_List;
    begin
       if not Flags (Message).No_Reply_Expected then
          Log (Info, "Send Error: " & Name & " " & Description);
          E :=
            Compose_Error
-             (Error => Name, Reply_To => Message,
+             (Error       => Name, Reply_To => Message,
               Destination => Sender (Message));
 
          if Description'Length > 0 then
@@ -122,7 +122,7 @@ package body D_Bus.Dispatching is
                      declare
                         O_R : constant Object_Record_SP.Ref :=
                           Table.Objects (Path (M));
-                        D_R : constant Dispatcher_Record :=
+                        D_R : constant Dispatcher_Record    :=
                           Table.Dispatchers (M_Interface (M));
                      begin
                         Log
@@ -158,10 +158,10 @@ package body D_Bus.Dispatching is
    is
       use Ada.Real_Time;
 
-      Sent : D_Bus.Messages.Message := Message;
-      Cursor : Message_Lists.Cursor := Message_Lists.No_Element;
+      Sent            : D_Bus.Messages.Message := Message;
+      Cursor          : Message_Lists.Cursor   := Message_Lists.No_Element;
       Desired_Timeout : Time_Span;
-      Search_Start : Time;
+      Search_Start    : Time;
    begin
       Log (Info, "Send message and await reply");
 
@@ -194,9 +194,10 @@ package body D_Bus.Dispatching is
             raise No_Reply;
          end if;
 
-         --  Try dispatching for one second
-         --  This minimises the amount we can overshoot the timeout
-         Dispatch (Table, 1.0);
+         --  Try dispatching for the amount of time remaining
+         --  before the timeout.
+         Dispatch
+           (Table, To_Duration (Desired_Timeout - (Clock - Search_Start)));
       end loop Outer;
 
       --  Remove reply from queue and return
@@ -218,16 +219,16 @@ package body D_Bus.Dispatching is
 
    function Await
      (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path;
-      M_Interface : D_Bus.Types.Extra.Interface_Name;
-      Member : D_Bus.Types.Extra.Member_Name;
-      Timeout : Await_Duration := Forever) return D_Bus.Messages.Message
+      M_Interface :        D_Bus.Types.Extra.Interface_Name;
+      Member      :        D_Bus.Types.Extra.Member_Name;
+      Timeout     :    Await_Duration := Forever) return D_Bus.Messages.Message
    is
       use Ada.Real_Time;
       use D_Bus.Messages;
 
-      Cursor : Message_Lists.Cursor := Message_Lists.No_Element;
+      Cursor          : Message_Lists.Cursor := Message_Lists.No_Element;
       Desired_Timeout : Time_Span;
-      Search_Start : Time;
+      Search_Start    : Time;
    begin
       Log
         (Info,
@@ -258,7 +259,8 @@ package body D_Bus.Dispatching is
          end loop;
 
          --  Keep trying indefinitely if 'forever'
-         if Timeout = Forever then
+         if Timeout = Forever or Timeout >= GNAT.Sockets.Selector_Duration'Last
+         then
             Dispatch (Table, GNAT.Sockets.Forever);
          else
             --  Error out if timeout exceeded
@@ -266,8 +268,10 @@ package body D_Bus.Dispatching is
                raise No_Signal;
             end if;
 
-            --  Update once a second to minimise inaccuracy
-            Dispatch (Table, 1.0);
+            --  Allow waiting up to the remaining time before the
+            --  timeout.
+            Dispatch
+              (Table, To_Duration (Desired_Timeout - (Clock - Search_Start)));
          end if;
       end loop Outer;
 
@@ -294,8 +298,8 @@ package body D_Bus.Dispatching is
    end Destroy_Object;
 
    procedure Remove_Dispatcher
-     (Table : in out Dispatch_Table;
-      M_Interface : D_Bus.Types.Extra.Interface_Name)
+     (Table       : in out Dispatch_Table;
+      M_Interface :        D_Bus.Types.Extra.Interface_Name)
    is
       C : Dispatcher_Interface_Maps.Cursor;
    begin
@@ -359,11 +363,11 @@ package body D_Bus.Dispatching is
          end if;
 
          declare
-            O_R : Object_Record;
+            O_R   : Object_Record;
             O_RSP : Object_Record_SP.Ref;
          begin
-            O_R.Alias := As_Abstract_Object_Access (new Object_Type);
-            O_R.Tag := Tag_Check'Tag;
+            O_R.Alias   := As_Abstract_Object_Access (new Object_Type);
+            O_R.Tag     := Tag_Check'Tag;
             O_R.Release := As_Release_Function (Release_AOA'Address);
             O_RSP.Set (O_R);
 
@@ -372,13 +376,13 @@ package body D_Bus.Dispatching is
       end Create_Object;
 
       procedure Dispatch_Transformer
-        (Table : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-         Object : Object_Record; M : D_Bus.Messages.Message);
+        (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+         Object :        Object_Record; M : D_Bus.Messages.Message);
       --  Note: conforms to access procedure `Dispatch_Transformer` (...)
 
       procedure Dispatch_Transformer
-        (Table : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-         Object : Object_Record; M : D_Bus.Messages.Message)
+        (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+         Object :        Object_Record; M : D_Bus.Messages.Message)
       is
          use type Ada.Tags.Tag;
       begin
@@ -396,7 +400,7 @@ package body D_Bus.Dispatching is
          end if;
 
          As_Dispatcher_Type (Dispatcher)
-           (Table => Table, Object => As_Object_Access (Object.Alias).all,
+           (Table   => Table, Object => As_Object_Access (Object.Alias).all,
             Message => M);
       end Dispatch_Transformer;
 
@@ -404,9 +408,9 @@ package body D_Bus.Dispatching is
       -- Add_Dispatcher --
       --------------------
       procedure Add_Dispatcher
-        (Table : in out Dispatch_Table;
-         M_Interface : D_Bus.Types.Extra.Interface_Name;
-         Dispatcher : Dispatcher_Type)
+        (Table       : in out Dispatch_Table;
+         M_Interface :        D_Bus.Types.Extra.Interface_Name;
+         Dispatcher  :        Dispatcher_Type)
       is
          DR : Dispatcher_Record;
       begin
@@ -414,7 +418,7 @@ package body D_Bus.Dispatching is
             raise Duplicate_Dispatcher with String (M_Interface);
          end if;
 
-         DR.Actual := As_Abstract_Dispatcher_Type (Dispatcher);
+         DR.Actual  := As_Abstract_Dispatcher_Type (Dispatcher);
          DR.Wrapper := As_Dispatch_Transformer (Dispatch_Transformer'Address);
          Table.Dispatchers.Insert (M_Interface, DR);
       end Add_Dispatcher;

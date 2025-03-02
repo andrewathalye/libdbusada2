@@ -1,5 +1,6 @@
 pragma Ada_2022;
 
+with D_Bus.Connection;
 with D_Bus.Messages;    use D_Bus.Messages;
 with D_Bus.Dispatching; use D_Bus.Dispatching;
 
@@ -31,7 +32,11 @@ procedure Tests is
       Send (T, Compose_Return (Reply_To => M, Destination => Sender (M)));
    end Dispatcher;
 
-   T     : D_Bus.Dispatching.Dispatch_Table := D_Bus.Dispatching.Create;
+   C     : D_Bus.Connection.Connection      :=
+     D_Bus.Connection.Connect
+       ("unixexec:path=dbus-daemon,argv1=--session,argv2=--nofork,"
+        & "argv3=--address%3dunix%3apath%3d/dev/stdout");
+   T     : D_Bus.Dispatching.Dispatch_Table := Create (C);
    Reply : D_Bus.Messages.Message;
    M     : D_Bus.Messages.Message;
 begin

@@ -1,7 +1,6 @@
 pragma Ada_2012;
 
 with GNAT.Regexp;
-with GNAT.Regpat;
 
 package body D_Bus.Types.Extra is
    -----------------------
@@ -34,17 +33,17 @@ package body D_Bus.Types.Extra is
    end Valid_Bus;
 
    pragma Style_Checks (Off);
-   Server_Regpat : constant GNAT.Regpat.Pattern_Matcher :=
-     GNAT.Regpat.Compile
-       (Expression =>
-          "(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?)(?:;(([a-z]+):(?:([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+)(?:,([a-z]+)=((?:[-0-9A-Za-z_\/.\*]|(?:%[0-9A-Fa-f]{2}))+))*)?))*");
+   Server_Regexp : constant GNAT.Regexp.Regexp :=
+     GNAT.Regexp.Compile
+       (Pattern =>
+          "((([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+):((([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)=(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)(,(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)=(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+))*)?)(;((([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+):((([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)=(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)(,(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+)=(([-0-9A-Za-z_\/.\*]|(%[0-9A-Fa-f][0-9A-Fa-f]))+))*)?))*");
    --  Note: Generated from specification using tools/regex_serveraddr.sh
    --  This will recognise any SYNTACTICALLY valid server address
    pragma Style_Checks (On);
 
    function Valid_Address (X : String) return Boolean is
    begin
-      return GNAT.Regpat.Match (Server_Regpat, X);
+      return GNAT.Regexp.Match (X, Server_Regexp);
    end Valid_Address;
 
 end D_Bus.Types.Extra;

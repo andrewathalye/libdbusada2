@@ -37,7 +37,10 @@ LOCAL const int max_possible_fds = 0;
 
 LOCAL bool is_running_c(pid_t handle) { return (bool)getpgid(handle) > 0; }
 
-LOCAL bool read_fds_c(int socket, int *fds, int *fd_count, void *token, int token_length) {
+enum result_t { DESTRUCTIVE, TRANSIENT, SUCCESS };
+
+LOCAL enum result_t read_fds_c(int socket, int *fds, int *fd_count, void *token,
+                      int token_length) {
 #ifdef SCM_RIGHTS
   struct iovec iov = {.iov_base = token, .iov_len = token_length};
   struct msghdr hdr = {0};
@@ -56,15 +59,15 @@ LOCAL bool read_fds_c(int socket, int *fds, int *fd_count, void *token, int toke
 
   /* Try to receive a message */
   if (recvmsg(socket, &hdr, 0) == -1)
-    return false;
+    return TRANSIENT;
 
   if ((chdr = CMSG_FIRSTHDR(&hdr)) == NULL)
-    return false;
+    return DESTRUCTIVE;
 
   /*TODO check cmsg nxthdr for potential ddos attack and close fds */
   /* Fail if this is the wrong kind of aux message */
   if (chdr->cmsg_level != SOL_SOCKET || chdr->cmsg_type != SCM_RIGHTS) {
-    return false;
+    return DESTRUCTIVE;
   }
 
   /* Calculate number of fds passed */
@@ -78,14 +81,15 @@ LOCAL bool read_fds_c(int socket, int *fds, int *fd_count, void *token, int toke
 
   *fd_count = i;
 
-  return true;
+  return SUCCESS;
 
 #else
-  return false;
+  return TRANSIENT;
 #endif
 }
 
-LOCAL bool write_fds_c(int socket, int *fds, int fd_count, void *token, int token_length) {
+LOCAL bool write_fds_c(int socket, int *fds, int fd_count, void *token,
+                       int token_length) {
   if (fd_count < 0)
     return false;
 
