@@ -22,11 +22,33 @@ package D_Bus.Dispatching is
    --  Represents a data table containing
    --  associations between objects and paths
    --  and interfaces and handler functions.
+   --
+   --  Note: A dispatcher must not do any of the following:
+   --  1) Destroy its own dispatching table TODO
+   --  2) Call function `Send`
+   --     a) If the destination and sender are the same.
+   --     b) If it is known that the destination will call
+   --        a method or wait for a signal from the sender.
+   --
+   --  Violating constraint 1 is exceptional behaviour.
+   --  Violating constraint 2 will violate the time constraints below.
 
    --  Note: Trying to create a subtype for valid dispatch tables
    --  caused a compiler crash, so instead the type is implemented
-   --  such that all values are 'valid' but using it without a
-   --  connection will simply raise an exception.
+   --  such that all values are 'valid', but using it with an
+   --  invalid connection will be handled on attempting to send data.
+
+   function Is_Connected (Table : Dispatch_Table) return Boolean;
+   --  Return whether `Table` currently has a connection.
+
+   procedure Create
+     (Connection : in out D_Bus.Connection.Connection;
+      Table      :    out Dispatch_Table) with
+     Pre =>
+      Connection in D_Bus.Connection.Connected_Connection and
+      not Is_Connected (Table);
+   --  Assign `Connection` to `Table`. `Table` must not have an
+   --  associated connection.
 
    function Create
      (Connection : in out D_Bus.Connection.Connection)
@@ -39,12 +61,10 @@ package D_Bus.Dispatching is
    --  Create a new dispatch table using the default session bus.
 
    procedure Destroy
-     (Table      : out Dispatch_Table;
-      Connection : out D_Bus.Connection.Connection);
-   --  Destroy all data held by `Table`.
-   --  `Connection` is returned to the caller.
-   --
-   --  TODO automatically destroy on scope exit!
+     (Table      : in out Dispatch_Table;
+      Connection :    out D_Bus.Connection.Connection);
+   --  Return control of `Connection` to the caller.
+   --  This also clears all data in `Table`
 
    ------------------------
    -- Message Management --
@@ -62,8 +82,6 @@ package D_Bus.Dispatching is
    --  Raise `No_Reply` if no reply was received after an
    --  implementation-defined amount of time.
 
-   --  TODO provide some mechanism for signals
-
    procedure Send
      (Table : in out Dispatch_Table; Message : D_Bus.Messages.Message) with
      Pre =>
@@ -72,13 +90,24 @@ package D_Bus.Dispatching is
    --  Sends `Message` via `Table`
    --  It is an error to call this with a message that expects a reply.
 
+   No_Signal : exception;
+   subtype Await_Duration is Duration range -1.0 .. Duration'Last;
+   Forever : constant Await_Duration;
+
+   function Await
+     (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path;
+      M_Interface :        D_Bus.Types.Extra.Interface_Name;
+      Member      :        D_Bus.Types.Extra.Member_Name;
+      Timeout     : Await_Duration := Forever) return D_Bus.Messages.Message;
+   --  Return a signal `Member` on interface `M_Interface`
+   --  from the object with path `Path`.
+   --
+   --  Wait for up to Timeout + 1 seconds (or Forever)
+   --  Raise `No_Signal` on failure.
+
    procedure Dispatch (Table : in out Dispatch_Table);
    --  Reads all pending messages and dispatches them according to table rules.
    --  Will block until at least one message has been read.
-   --
-   --  It is permissible for a dispatcher to to modify `Table`
-   --  It is also permissible to recursively call D_Bus functions located on
-   --  a local machine from within a dispatcher.
 
    -----------------------
    -- Object Management --
@@ -140,6 +169,9 @@ package D_Bus.Dispatching is
       --  Raise `Duplicate_Dispatcher` if the dispatcher already exists.
    end Generic_Dispatching;
 private
+   -----------------------------
+   -- Private Implementations --
+   -----------------------------
    type Abstract_Object_Type is limited null record;
    type Abstract_Object_Access is access Abstract_Object_Type;
 
@@ -200,4 +232,12 @@ private
       Objects     : Object_Path_Maps.Map;
       Dispatchers : Dispatcher_Interface_Maps.Map;
    end record;
+
+   --------------------------------
+   -- Completions of Public Part --
+   --------------------------------
+   function Is_Connected (Table : Dispatch_Table) return Boolean is
+     (D_Bus.Connection.Is_Connected (Table.Connection));
+
+   Forever : constant Await_Duration := Await_Duration'Last;
 end D_Bus.Dispatching;

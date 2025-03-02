@@ -18,7 +18,8 @@ is
      (C_Auth, C_Cancel, C_Begin, C_Data, C_Error, C_Negotiate_Unix_Fd, C_Ok,
       C_Rejected, C_Agree_Unix_Fd);
    type SASL_State is (Initial, Authenticate, Ok, Unix_FD, Final, Failure);
-   type SASL_Method is (External, DBus_Cookie_SHA1, Anonymous);
+   type SASL_Method is (External, Anonymous);
+   --  Note: We do not support DBus_Cookie_SHA1
 
    -------------
    -- Utility --
@@ -228,9 +229,6 @@ is
                               else
                                  State := Failure;
                               end if;
-                           when DBus_Cookie_SHA1 =>
-                              --  TODO no implementation yet
-                              State := Failure;
                            when Anonymous =>
                               --  TODO add security
                               State := Ok;
@@ -256,7 +254,9 @@ is
                   when C_Begin =>
                      State := Final;
                   when C_Agree_Unix_Fd =>
-                     if D_Bus.Platform.FD_Transfer_Support (C.Socket) then
+                     if D_Bus.Platform.File_Descriptor_Passing_Support
+                         (C.Socket)
+                     then
                         SASL_Send (C_Agree_Unix_Fd);
                         C.Unix_Fd_Support := True;
                         State             := Final;
@@ -310,8 +310,6 @@ is
                           (C_Auth,
                            External'Image & " " &
                            To_Hex (D_Bus.Platform.Get_User_ID));
-                     when DBus_Cookie_SHA1 =>
-                        raise Program_Error with "unimplemented TODO";
                      when Anonymous =>
                         SASL_Send (C_Auth, Anonymous'Image);
                   end case;
@@ -332,7 +330,8 @@ is
                C.UUID := D_Bus.Types.UUID (From_Hex (To_String (Buf)));
                State  := Unix_FD;
             when Unix_FD =>
-               if D_Bus.Platform.FD_Transfer_Support (C.Socket) then
+               if D_Bus.Platform.File_Descriptor_Passing_Support (C.Socket)
+               then
                   SASL_Send (C_Negotiate_Unix_Fd);
 
                   case SASL_Receive (Buf) is

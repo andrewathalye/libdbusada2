@@ -239,6 +239,7 @@ package body D_Bus.Messages is
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Error_Name).Get);
    end Error;
+
    function Is_Reply (Original, Reply : Message) return Boolean is
       Reply_RS : Valid_Message_Serial;
    begin
@@ -256,9 +257,6 @@ package body D_Bus.Messages is
       use type D_Bus.Types.Basic.D_String;
    begin
       return +D_Bus.Types.Basic.D_String (M.Fields (F_Destination).Get);
-   exception
-      when Constraint_Error =>
-         raise Field_Absent;
    end Destination;
 
    function Sender (M : Message) return D_Bus.Types.Extra.Bus_Name is
@@ -398,6 +396,12 @@ package body D_Bus.Messages is
 
       RMH : Raw_Message_Header;
    begin
+      --  Note The array of UNIX file descriptors included with a Message
+      --  is passed alongside the first byte of the message header by the
+      --  reference D-Bus implementation. We must therefore copy this
+      --  implementation for compatibility purposes.
+      --  TODO implement
+
       --  Read raw header
       --  Note: Alignment reset before this!
       Raw_Message_Header'Read (Stream, RMH);
@@ -449,6 +453,7 @@ package body D_Bus.Messages is
       end if;
 
       --  Read elements one by one
+      --  TODO what happens if F_Signature is intentionally wrong?
       declare
          Types : constant D_Bus.Types.Single_Signature_Array :=
            D_Bus.Types.Split_Signature
@@ -459,6 +464,8 @@ package body D_Bus.Messages is
               (D_Bus.Types.Dispatching_Read (Stream, Signature.all));
          end loop;
       end;
+
+      --  TODO rewrite file descriptors based upon received array
    end Read;
 
    procedure Write
@@ -501,20 +508,32 @@ package body D_Bus.Messages is
          end;
       end loop;
 
-      --  Add calculated fields (currently SIGNATURE)
-      --  Note only if there are arguments
-      if not Item.Arguments.Is_Empty then
-         declare
-            use D_Bus.Types.Containers;
+      --  Add calculated fields
+      Add_Calculated_Fields :
+      begin
+         --  F_Signature (if there are arguments)
+         if not Item.Arguments.Is_Empty then
+            declare
+               use D_Bus.Types.Containers;
 
-            S : Struct := Empty (Field_Struct_Contents);
-         begin
-            S.Set (1, +F_Signature);
-            S.Set (2, +(+D_Bus.Types.Signature (Item.Arguments)));
+               S : Struct := Empty (Field_Struct_Contents);
+            begin
+               S.Set (1, +F_Signature);
+               S.Set (2, +(+D_Bus.Types.Signature (Item.Arguments)));
 
-            RMH.Fields.Append (S);
-         end;
-      end if;
+               RMH.Fields.Append (S);
+            end;
+         end if;
+
+         --  F_Unix_Fds (if the message contains UNIX file descriptors)
+         --  TODO
+      end Add_Calculated_Fields;
+
+      --  Note The reference D-Bus implementation writes its array of UNIX
+      --  File Descriptors alongside the first byte of the message header.
+      --  We copy this implementation for the sake of compatibility, although
+      --  it has undesirably effects on code complexity.
+      --  TODO
 
       --  Write header
       --  Note: Alignment reset before this :)

@@ -22,11 +22,10 @@ package body D_Bus.Connection is
    ----------
    -- Move --
    ----------
-   procedure Move (Input : in out Connection; Output : out Connection)
-   is
+   procedure Move (Input : in out Connection; Output : out Connection) is
    begin
       Output := Input;
-      Input := (others => <>);
+      Input  := (others => <>);
    end Move;
 
    -------------
@@ -100,7 +99,7 @@ package body D_Bus.Connection is
          others                                       => <>);
    end Stream;
 
-   --  TODO don’t make a fresh stream?
+   --  Note: Making a fresh stream also resets alignment, which is ideal.
    procedure Send (C : aliased Connection; M : in out D_Bus.Messages.Message)
    is
       S : aliased Canonical_Alignable_Stream := Stream (C);
@@ -132,11 +131,13 @@ package body D_Bus.Connection is
       return Status = GNAT.Sockets.Completed;
    end Can_Read;
 
-   -----------------
-   -- FD Transfer --
-   -----------------
-   function FD_Transfer_Support (C : Connected_Connection) return Boolean is
-     (C.Unix_Fd_Support and D_Bus.Platform.FD_Transfer_Support (C.Socket));
+   ----------------
+   -- FD Passing --
+   ----------------
+   function File_Descriptor_Passing_Support
+     (C : Connected_Connection) return Boolean is
+     (C.Unix_Fd_Support and
+      D_Bus.Platform.File_Descriptor_Passing_Support (C.Socket));
 
    --------------------
    -- Random Numbers --

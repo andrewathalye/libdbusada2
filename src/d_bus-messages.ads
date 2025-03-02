@@ -141,6 +141,9 @@ package D_Bus.Messages is
      Pre =>
       M_Type (Original) = Method_Call and
       M_Type (Reply) in Method_Return | Error;
+   --  Note: This does not check that `Reply` came from the destination
+   --  of `Original`. Because of D_Bus semantics, such a check would
+   --  be very expensive, and the message bus must be trusted here.
 
    function Destination (M : Message) return D_Bus.Types.Extra.Bus_Name;
 

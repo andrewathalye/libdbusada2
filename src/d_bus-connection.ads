@@ -149,7 +149,8 @@ private
    -------------------
    -- Compatibility --
    -------------------
-   function FD_Transfer_Support (C : Connected_Connection) return Boolean;
+   function File_Descriptor_Passing_Support
+     (C : Connected_Connection) return Boolean;
    --  Check whether `C` supports UNIX File Descriptor transfers.
    --  This requires support at both ends of the connection.
 

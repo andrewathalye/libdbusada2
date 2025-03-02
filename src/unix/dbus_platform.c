@@ -37,11 +37,9 @@ LOCAL const int max_possible_fds = 0;
 
 LOCAL bool is_running_c(pid_t handle) { return (bool)getpgid(handle) > 0; }
 
-/*TODO is this impl reliable? can we end up reading multiple msgs worth of cmsg
- * data?*/
-LOCAL bool read_fds_c(int socket, int *fds, int *fd_count) {
+LOCAL bool read_fds_c(int socket, int *fds, int *fd_count, void *token, int token_length) {
 #ifdef SCM_RIGHTS
-  struct iovec iov = {.iov_base = &fd_count, .iov_len = sizeof(fd_count)};
+  struct iovec iov = {.iov_base = token, .iov_len = token_length};
   struct msghdr hdr = {0};
   struct cmsghdr *chdr;
   int i = 0;
@@ -70,11 +68,15 @@ LOCAL bool read_fds_c(int socket, int *fds, int *fd_count) {
   }
 
   /* Calculate number of fds passed */
+  *fd_count = 0;
   while (CMSG_LEN((i + 1) * sizeof(int)) <= chdr->cmsg_len)
     i++;
 
+  /* Copy data */
+  for (int j = 0; j < i; j++)
+    fds[j] = ((int *)CMSG_DATA(chdr))[j];
+
   *fd_count = i;
-  memcpy(fds, CMSG_DATA(chdr), i * sizeof(int));
 
   return true;
 
@@ -83,12 +85,12 @@ LOCAL bool read_fds_c(int socket, int *fds, int *fd_count) {
 #endif
 }
 
-LOCAL bool write_fds_c(int socket, int *fds, int fd_count) {
+LOCAL bool write_fds_c(int socket, int *fds, int fd_count, void *token, int token_length) {
   if (fd_count < 0)
     return false;
 
 #ifdef SCM_RIGHTS
-  struct iovec iov = {.iov_base = &fd_count, .iov_len = sizeof(fd_count)};
+  struct iovec iov = {.iov_base = &token, .iov_len = token_length};
   struct msghdr hdr = {0};
   struct cmsghdr *chdr;
 
@@ -110,12 +112,10 @@ LOCAL bool write_fds_c(int socket, int *fds, int fd_count) {
   chdr->cmsg_type = SCM_RIGHTS;
 
   /* Copy data */
-  memcpy(CMSG_DATA(chdr), fds, fd_count * sizeof(int));
+  for (int i = 0; i < fd_count; i++)
+    ((int *)CMSG_DATA(chdr))[i] = fds[i];
 
-  if (sendmsg(socket, &hdr, 0) == -1)
-    return false;
-
-  return true;
+  return sendmsg(socket, &hdr, 0) != -1;
 #else
   return false;
 #endif
@@ -187,11 +187,7 @@ LOCAL bool write_credentials_c(int sockfd) {
   if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &flag, sizeof(flag)) != 0)
     return false;
 
-  if (sendmsg(sockfd, &hdr, 0) == -1) {
-    return false;
-  }
-
-  return true;
+  return sendmsg(sockfd, &hdr, 0) != -1;
 #else
   return false;
 #endif

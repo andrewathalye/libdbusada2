@@ -1,63 +1,55 @@
 pragma Ada_2022;
 
+with Ada.Containers.Indefinite_Hashed_Sets;
 with Ada.Containers.Indefinite_Vectors;
-with System.Storage_Elements;
-with System.Storage_Pools;
+with Ada.Strings.Hash;
+with Ada.Unchecked_Conversion;
+
 with GNATCOLL.Strings;
 
 package body D_Bus.Types is
    -------------------------
    -- Signature Interning --
    -------------------------
-   --  TODO implement
-   type Interning_Pool is new System.Storage_Pools.Root_Storage_Pool
-   with null record;
+   function Hash (Item : U_Contents_Signature) return Ada.Containers.Hash_Type;
+   function Hash (Item : U_Contents_Signature) return Ada.Containers.Hash_Type
+   is
+   begin
+      return Ada.Strings.Hash (String (Item));
+   end Hash;
 
-   overriding
-   procedure Allocate
-     (Pool                     : in out Interning_Pool;
-      Storage_Address          : out System.Address;
-      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
-      Alignment                : System.Storage_Elements.Storage_Count)
-   is null;
+   package Signature_Sets is new
+     Ada.Containers.Indefinite_Hashed_Sets (U_Contents_Signature, Hash, "=");
 
-   overriding
-   procedure Deallocate
-     (Pool                     : in out Interning_Pool;
-      Storage_Address          : System.Address;
-      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
-      Alignment                : System.Storage_Elements.Storage_Count)
-   is null;
+   type U_Contents_Signature_Access is access all U_Contents_Signature;
 
-   overriding
-   function Storage_Size
-     (Pool : Interning_Pool) return System.Storage_Elements.Storage_Count
-   is (0);
-
-   Interning_Pool_Obj : Interning_Pool;
-   pragma Unreferenced (Interning_Pool_Obj);
-
-   type Interned_Single_Allocatable is
-     not null access constant Single_Signature;
-   --   for Interned_Single_Allocatable'Storage_Pool use Interning_Pool_Obj;
-
-   type Interned_Contents_Allocatable is
-     not null access constant Contents_Signature;
-   --  for Interned_Contents_Allocatable'Storage_Pool use Interning_Pool_Obj;
+   Interned_Strings : Signature_Sets.Set;
 
    function Intern (X : Single_Signature) return Interned_Single_Signature is
+      function Convert is new
+        Ada.Unchecked_Conversion
+          (U_Contents_Signature_Access,
+           Interned_Single_Signature);
+
+      Cursor : Signature_Sets.Cursor;
+      Inserted : Boolean;
    begin
-      return
-        Interned_Single_Signature
-          (Interned_Single_Allocatable'(new Single_Signature'(X)));
+      Interned_Strings.Insert (U_Contents_Signature (X), Cursor, Inserted);
+      return Convert (Interned_Strings.Constant_Reference (Cursor).Element);
    end Intern;
 
    function Intern (X : Contents_Signature) return Interned_Contents_Signature
    is
+      function Convert is new
+        Ada.Unchecked_Conversion
+          (U_Contents_Signature_Access,
+           Interned_Contents_Signature);
+
+      Cursor : Signature_Sets.Cursor;
+      Inserted : Boolean;
    begin
-      return
-        Interned_Contents_Signature
-          (Interned_Contents_Allocatable'(new Contents_Signature'(X)));
+      Interned_Strings.Insert (X, Cursor, Inserted);
+      return Convert (Interned_Strings.Constant_Reference (Cursor).Element);
    end Intern;
 
    ----------------
@@ -185,7 +177,7 @@ package body D_Bus.Types is
 
       --  Produce and return array
       --  Note: Ada 2022 syntax was the best I could come up with here
-      --  Otherwise weÃ¢ÂÂd break invariants for not null access
+      --  Otherwise we'd break invariants for not null access
       return [for SS of Result_Vector => Intern (SS)];
    end U_Split_Signature;
 
@@ -201,7 +193,7 @@ package body D_Bus.Types is
          return False;
       end if;
 
-      --  Basic types canÃ¢ÂÂt be longer than 1
+      --  Basic types can't be longer than 1
       if X (X'First) in Basic_Signature_Element or X (X'First) = Variant_CC
       then
          if X'Length > 1 then
@@ -346,21 +338,21 @@ package body D_Bus.Types is
    -------------
    -- Padding --
    -------------
-   function Alignment_For (CC : Signature_Element) return Padding_Alignment is
-   (case CC is
-      when Byte_CC => 1,
-      when Boolean_CC => 4,
-      when Int16_CC | Uint16_CC => 2,
-      when Int32_CC | Uint32_CC => 4,
-      when Int64_CC | Uint64_CC => 8,
-      when Double_CC => 8,
-      when String_CC => Alignment_For (Uint32_CC),
-      when Object_Path_CC => Alignment_For (Uint32_CC),
-      when Signature_CC => Alignment_For (Byte_CC),
-      when Array_CC => Alignment_For (Uint32_CC),
-      when Struct_Start_CC => 8,
-      when Variant_CC => Alignment_For (Signature_CC),
-      when File_Descriptor_CC => 4,
-      when others => raise Program_Error);
+   function Alignment_For (CC : Signature_Element) return Padding_Alignment
+   is (case CC is
+         when Byte_CC => 1,
+         when Boolean_CC => 4,
+         when Int16_CC | Uint16_CC => 2,
+         when Int32_CC | Uint32_CC => 4,
+         when Int64_CC | Uint64_CC => 8,
+         when Double_CC => 8,
+         when String_CC => Alignment_For (Uint32_CC),
+         when Object_Path_CC => Alignment_For (Uint32_CC),
+         when Signature_CC => Alignment_For (Byte_CC),
+         when Array_CC => Alignment_For (Uint32_CC),
+         when Struct_Start_CC => 8,
+         when Variant_CC => Alignment_For (Signature_CC),
+         when File_Descriptor_CC => 4,
+         when others => raise Program_Error);
 
 end D_Bus.Types;

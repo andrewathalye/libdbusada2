@@ -91,15 +91,16 @@ package body D_Bus.Encodings is
       return To_String (Buffer);
    end Encode_Server_Address;
 
-   --  TODO learn what happens if we decode an empty string
-   --  currently unsure what the representation of such an array
-   --  looks like internally
    function Decode_Server_Address (Text : String) return String is
       use Ada.Strings.Unbounded;
 
       Buffer : Ada.Strings.Unbounded.Unbounded_String;
       Index  : Positive := Text'First;
    begin
+      if Text'Length = 0 then
+         raise Invalid_Encoding;
+      end if;
+
       while Index <= Text'Last loop
          case Text (Index) is
             when '%' =>
