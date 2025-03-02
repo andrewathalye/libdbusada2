@@ -31,46 +31,43 @@ procedure Tests is
       Send (T, Compose_Return (Reply_To => M, Destination => Sender (M)));
    end Dispatcher;
 
-   T       : D_Bus.Dispatching.Dispatch_Table := D_Bus.Dispatching.Create;
-   Discard : D_Bus.Messages.Message;
-   M       : D_Bus.Messages.Message;
+   T     : D_Bus.Dispatching.Dispatch_Table := D_Bus.Dispatching.Create;
+   Reply : D_Bus.Messages.Message;
+   M     : D_Bus.Messages.Message;
 begin
-   Discard :=
+   Reply :=
      Send
        (T,
         Compose_Call
           (Path        => "/org/freedesktop/DBus",
            M_Interface => "org.freedesktop.DBus", Member => "Hello",
            Destination => "org.freedesktop.DBus"));
+   pragma Assert (M_Type (Reply) = Method_Return);
 
    M :=
      Compose_Call
        (Path => "/org/freedesktop/DBus", M_Interface => "org.freedesktop.DBus",
         Member => "RequestName", Destination => "org.freedesktop.DBus");
    declare
-      Str  : D_Bus.Types.Basic.D_String;
-      U32  : D_Bus.Types.Basic.Uint32;
+      use D_Bus.Types.Basic;
       Args : D_Bus.Types.Argument_List;
    begin
-      Str := "tk.zenithseeker.test";
-      U32 := 1;
-      Args.Append (Str);
-      Args.Append (U32);
+      Args.Append (D_String'("tk.zenithseeker.test"));
+      Args.Append (Uint32'(1));
       Add_Arguments (M, Args);
    end;
 
-   Discard := Send (T, M);
+   Reply := Send (T, M);
+   pragma Assert (M_Type (Reply) = Method_Return);
 
    CO_Dispatching.Add_Dispatcher
      (T, "tk.zenithseeker.test", Dispatcher'Access);
    CO_Dispatching.Create_Object (T, "/");
    NR_Dispatching.Create_Object (T, "/NR");
 
-   Put_Line ("Dispatch");
+   Put_Line ("Ready to Dispatch");
 
    loop
       Dispatch (T);
    end loop;
-
-   --   D_Bus.Connection.Disconnect (C);
 end Tests;

@@ -45,14 +45,12 @@ package D_Bus.Types.Basic is
    package Doubles is new Real_Wrappers (Double_CC, Interfaces.IEEE_Float_64);
    subtype Double is Doubles.Outer;
 
-   type File_Descriptor is new Basic_Type with private;
-
-   function "+" (X : File_Descriptor) return GNAT.OS_Lib.File_Descriptor;
-   function "+" (X : GNAT.OS_Lib.File_Descriptor) return File_Descriptor;
-
-   overriding function Signature (X : File_Descriptor) return Single_Signature;
-
-   overriding function Image (X : File_Descriptor) return String;
+   package File_Descriptors is new Discrete_Wrappers
+     (File_Descriptor_CC, GNAT.OS_Lib.File_Descriptor);
+   subtype File_Descriptor is File_Descriptors.Outer;
+   --  Note: This type is transparently remapped when reading Messages
+   --  from a Connection. If you manually read one from a stream, the
+   --  result will NOT correspond to a valid file descriptor.
 
    ------------------
    -- String Types --
@@ -82,41 +80,4 @@ package D_Bus.Types.Basic is
    subtype D_Signature is Signatures.Outer;
    --  For a lightweight Ada type, use `Single_Signature`
    --  or `Contents_Signature`
-private
-   type File_Descriptor is new Basic_Type with record
-      Inner : GNAT.OS_Lib.File_Descriptor;
-   end record;
-
-   --  TODO implement sending file descriptors!
-   --  over the wire these should send an index to OOB data array
-   procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out File_Descriptor) is null;
-
-   procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : File_Descriptor) is null;
-
-   for File_Descriptor'Read use Read;
-   for File_Descriptor'Write use Write;
-
-   overriding function Size
-     (X : File_Descriptor; Count : Ada.Streams.Stream_Element_Count)
-      return Ada.Streams.Stream_Element_Count is
-     (0);
-   --  TODO WRONG!
-
-   overriding function Image (X : File_Descriptor) return String is
-     (X.Inner'Image);
-
-   overriding function Signature
-     (X : File_Descriptor) return Single_Signature is
-     ((1 => File_Descriptor_CC));
-
-   function "+" (X : File_Descriptor) return GNAT.OS_Lib.File_Descriptor is
-     (X.Inner);
-
-   function "+" (X : GNAT.OS_Lib.File_Descriptor) return File_Descriptor is
-     ((Inner => X));
-
 end D_Bus.Types.Basic;
