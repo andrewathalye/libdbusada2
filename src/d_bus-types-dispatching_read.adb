@@ -3,6 +3,7 @@ pragma Ada_2012;
 with D_Bus.Types.Basic;      use D_Bus.Types.Basic;
 with D_Bus.Types.Containers; use D_Bus.Types.Containers;
 
+--  TODO rewrite using GENERIC_DISPATCHING_CONSTRUCTOR
 function D_Bus.Types.Dispatching_Read
   (Stream    : not null access Ada.Streams.Root_Stream_Type'Class;
    Signature : Single_Signature) return Root_Type'Class is

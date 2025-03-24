@@ -4,7 +4,7 @@ library project D_Bus_Ada_2 extends "gpr/shared" is
    type OS_Type is ("Windows_NT", "Darwin", "Unix");
    OS : OS_Type := external ("OS", "Unix");
 
-   Source_Dirs := ("src");
+   Source_Dirs := ("src", "src/standard/");
    
    case OS is
       when "Windows_NT" =>

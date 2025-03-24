@@ -50,6 +50,27 @@ package body D_Bus.Dispatching is
       Table.Dispatchers := Dispatcher_Interface_Maps.Empty_Map;
    end Destroy;
 
+   ------------------------------------
+   -- Global Dispatch List Internals --
+   ------------------------------------
+   type Dispatch_Transformer is
+     access procedure
+       (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
+        Object :        Object_Record; M : D_Bus.Messages.Message);
+
+   type Dispatcher_Record is record
+      Actual  : Abstract_Dispatcher_Type;
+      Wrapper : Dispatch_Transformer;
+   end record;
+
+   package Dispatcher_Interface_Maps is new Ada.Containers
+     .Indefinite_Hashed_Maps
+     (Key_Type        => D_Bus.Types.Extra.Interface_Name,
+      Element_Type    => Dispatcher_Record, Hash => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
+
+   Global_Dispatchers : Dispatcher_Interface_Maps.Map;
+
    ------------------------
    -- Message Management --
    ------------------------
@@ -118,12 +139,12 @@ package body D_Bus.Dispatching is
          case M_Type (M) is
             when Method_Call =>
                if Table.Objects.Contains (Path (M)) then
-                  if Table.Dispatchers.Contains (M_Interface (M)) then
+                  if Global_Dispatchers.Contains (M_Interface (M)) then
                      declare
                         O_R : constant Object_Record_SP.Ref :=
                           Table.Objects (Path (M));
                         D_R : constant Dispatcher_Record    :=
-                          Table.Dispatchers (M_Interface (M));
+                          Global_Dispatchers (M_Interface (M));
                      begin
                         Log
                           (Info,
@@ -297,20 +318,6 @@ package body D_Bus.Dispatching is
       end if;
    end Destroy_Object;
 
-   procedure Remove_Dispatcher
-     (Table       : in out Dispatch_Table;
-      M_Interface :        D_Bus.Types.Extra.Interface_Name)
-   is
-      C : Dispatcher_Interface_Maps.Cursor;
-   begin
-      if Table.Dispatchers.Contains (M_Interface) then
-         C := Table.Dispatchers.Find (M_Interface);
-         Table.Dispatchers.Delete (C);
-      else
-         raise No_Dispatcher with String (M_Interface);
-      end if;
-   end Remove_Dispatcher;
-
    ---------------------
    -- Generic Helpers --
    ---------------------
@@ -354,8 +361,8 @@ package body D_Bus.Dispatching is
       -------------------
       -- Create_Object --
       -------------------
-      procedure Create_Object
-        (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path)
+      function Create_Object
+        (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path) return Object_Holder
       is
       begin
          if Table.Objects.Contains (Path) then
@@ -363,15 +370,18 @@ package body D_Bus.Dispatching is
          end if;
 
          declare
+            O_A   : constant Object_Access := new Object_Type;
             O_R   : Object_Record;
             O_RSP : Object_Record_SP.Ref;
          begin
-            O_R.Alias   := As_Abstract_Object_Access (new Object_Type);
+            O_R.Alias   := As_Abstract_Object_Access (O_A);
             O_R.Tag     := Tag_Check'Tag;
             O_R.Release := As_Release_Function (Release_AOA'Address);
             O_RSP.Set (O_R);
 
             Table.Objects.Insert (Path, O_RSP);
+
+            return Object_Holder (X => O_A);
          end;
       end Create_Object;
 
@@ -408,19 +418,18 @@ package body D_Bus.Dispatching is
       -- Add_Dispatcher --
       --------------------
       procedure Add_Dispatcher
-        (Table       : in out Dispatch_Table;
-         M_Interface :        D_Bus.Types.Extra.Interface_Name;
+        (M_Interface :        D_Bus.Types.Extra.Interface_Name;
          Dispatcher  :        Dispatcher_Type)
       is
          DR : Dispatcher_Record;
       begin
-         if Table.Dispatchers.Contains (M_Interface) then
+         if Global_Dispatchers.Contains (M_Interface) then
             raise Duplicate_Dispatcher with String (M_Interface);
          end if;
 
          DR.Actual  := As_Abstract_Dispatcher_Type (Dispatcher);
          DR.Wrapper := As_Dispatch_Transformer (Dispatch_Transformer'Address);
-         Table.Dispatchers.Insert (M_Interface, DR);
+         Global_Dispatchers.Insert (M_Interface, DR);
       end Add_Dispatcher;
    end Generic_Dispatching;
 end D_Bus.Dispatching;

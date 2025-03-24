@@ -121,37 +121,50 @@ package D_Bus.Dispatching is
    --
    --  Raise `No_Object` if no object with that path exists
 
+   generic
+      type Object_Type is limited private;
+   procedure Create_Object
+     (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path);
+   --  Create an opaque object associated with `Path`.
+   --
+   --  Raise `Duplicate_Object` if the object already exists.
+
+   generic
+      type Object_Type (<>) is limited private;
+   package Generic_Object_Query is
+      type Object_Holder (X : not null access Object_Type) is
+        limited private with
+        Implicit_Dereference => X;
+
+      function Query_Object
+        (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path)
+         return Object_Holder;
+      --  Return a mutable reference to object with path `Path`
+      --
+      --  Raise `No_Object` if the object does not exist
+   private
+      type Object_Holder (X : not null access Object_Type) is
+      limited null record;
+   end Generic_Object_Query;
+
    ---------------------------
    -- Dispatcher Management --
    ---------------------------
    Duplicate_Dispatcher : exception;
    No_Dispatcher        : exception;
 
-   procedure Remove_Dispatcher
-     (Table       : in out Dispatch_Table;
-      M_Interface :        D_Bus.Types.Extra.Interface_Name);
-   --  Remove a dispatcher for the specified interface.
+   procedure Unregister_Dispatcher
+     (M_Interface : D_Bus.Types.Extra.Interface_Name);
+   --  Unregister a global dispatcher for `M_Interface`.
    --
-   --  Raise `No_Dispatcher` if no dispatcher was registered for `M_Interface`
+   --  Raise `No_Dispatcher` if no dispatcher for that interface is registered.
 
-   -------------------------
-   -- Generic Dispatching --
-   -------------------------
    generic
-      type Object_Type is limited private;
-   package Generic_Dispatching is
+      type Object_Type (<>) is limited private;
+   package Generic_Dispatcher_Management is
       --  The power of this package is in its ability to support _generic_
-      --  dispatching. Instantiate this package with any constrained
-      --  subtype and you will be able to add dispatchers and objects of
-      --  that type.
-
-      procedure Create_Object
-        (Table : in out Dispatch_Table; Path : D_Bus.Types.Basic.Object_Path);
-      --  Create an opaque object associated with `Path`.
-      --  An access to it will be returned on every call to a `Dispatcher`
-      --  function.
-      --
-      --  Raise `Duplicate_Object` if the object already exists.
+      --  dispatching. This also supports classwide types, as long as the
+      --  actual object at runtime is a descendant of that type.
 
       type Dispatcher_Type is
         access procedure
@@ -159,15 +172,18 @@ package D_Bus.Dispatching is
            Message :        D_Bus.Messages.Message);
       --  Takes a reference to an object and a copy of a message associated
       --   with that object.
+      --
+      --  The dispatcher should not raise exceptions due to semantically
+      --  invalid Messages. Instead use `D_Bus.Errors`.
 
-      procedure Add_Dispatcher
-        (Table       : in out Dispatch_Table;
-         M_Interface :        D_Bus.Types.Extra.Interface_Name;
-         Dispatcher  :        Dispatcher_Type);
+      procedure Register_Dispatcher
+        (M_Interface : D_Bus.Types.Extra.Interface_Name;
+         Dispatcher  : Dispatcher_Type);
       --  Assign a dispatcher for the specified interface.
+      --  This is a GLOBAL operation and NOT thread-safe
       --
       --  Raise `Duplicate_Dispatcher` if the dispatcher already exists.
-   end Generic_Dispatching;
+   end Generic_Dispatcher_Management;
 private
    -----------------------------
    -- Private Implementations --
@@ -204,33 +220,16 @@ private
        (Table   : in out Dispatch_Table; Object : in out Abstract_Object_Type;
         Message :        D_Bus.Messages.Message);
 
-   type Dispatch_Transformer is
-     access procedure
-       (Table  : in out Dispatch_Table; Dispatcher : Abstract_Dispatcher_Type;
-        Object :        Object_Record; M : D_Bus.Messages.Message);
-
-   type Dispatcher_Record is record
-      Actual  : Abstract_Dispatcher_Type;
-      Wrapper : Dispatch_Transformer;
-   end record;
-
-   package Dispatcher_Interface_Maps is new Ada.Containers
-     .Indefinite_Hashed_Maps
-     (Key_Type        => D_Bus.Types.Extra.Interface_Name,
-      Element_Type    => Dispatcher_Record, Hash => Ada.Strings.Hash,
-      Equivalent_Keys => "=");
-
    use type D_Bus.Messages.Message;
    package Message_Lists is new Ada.Containers.Doubly_Linked_Lists
      (D_Bus.Messages.Message);
 
    type Dispatch_Table is limited record
-      Connection  : aliased D_Bus.Connection.Connection;
-      Messages    : Message_Lists.List;
-      Replies     : Message_Lists.List;
-      Signals     : Message_Lists.List;
-      Objects     : Object_Path_Maps.Map;
-      Dispatchers : Dispatcher_Interface_Maps.Map;
+      Connection : aliased D_Bus.Connection.Connection;
+      Messages   : Message_Lists.List;
+      Replies    : Message_Lists.List;
+      Signals    : Message_Lists.List;
+      Objects    : Object_Path_Maps.Map;
    end record;
 
    --------------------------------

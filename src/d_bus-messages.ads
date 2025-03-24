@@ -28,7 +28,7 @@ package D_Bus.Messages is
      (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Message);
    procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream :        not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : in out Message);
    --  Implementation details, not to be used directly.
    --  Use D_Bus.Connection instead
