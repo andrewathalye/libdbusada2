@@ -9,6 +9,9 @@ package D_Bus.Logging is
    --  Warning  = Printed by default.
    --  Error    = Printed by default in red.
 
+   procedure Set_Debug (State : Boolean);
+   --  Specify whether debug messages should be printed.
+
    procedure Log (Severity : Log_Severity; Message : String);
    procedure Log
      (Severity : Log_Severity; X : Ada.Exceptions.Exception_Occurrence);

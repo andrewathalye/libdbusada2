@@ -5,32 +5,29 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1737282082,
-        "narHash": "sha256-XCpD72YHErwHSk4utcYJwKqvllbyl5JrN9q4bM573Yg=",
-        "ref": "refs/heads/master",
-        "rev": "c883e52bdd01cb710bc77b958fa7cc5e3c3f00e5",
-        "revCount": 42,
-        "type": "git",
-        "url": "file:///home/andrew/src/ada/nix-ada"
+        "lastModified": 1785935822,
+        "narHash": "sha256-ZA5tOC7M7JKTxNbo+33lc4DdwX+TANAfgEHN5vwaDko=",
+        "path": "/home/andrew/src/ada/nix-ada",
+        "type": "path"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/andrew/src/ada/nix-ada"
+        "path": "/home/andrew/src/ada/nix-ada",
+        "type": "path"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1737029576,
-        "narHash": "sha256-GB9hOASuX0RKqSu5JARXSkc8h2cuZIKF3REX0eplh7E=",
+        "lastModified": 1775002709,
+        "narHash": "sha256-d3Yx83vSrN+2z/loBh4mJpyRqr9aAJqlke4TkpFmRJA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "310c5c4d3fd457d80365f52c71ac80b9d54a7cc4",
+        "rev": "bcd464ccd2a1a7cd09aa2f8d4ffba83b761b1d0e",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
-        "rev": "310c5c4d3fd457d80365f52c71ac80b9d54a7cc4",
         "type": "github"
       }
     },

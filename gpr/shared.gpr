@@ -9,10 +9,10 @@ abstract project Shared is
    end case;
 
    package Compiler is
-      Common_Switches := ("-gnatwa", "-gnatwe", "-gnatyy");
+      Common_Switches := ("-gnatwa", "-gnatyy");
 
       Dev_Switches := Common_Switches & ("-g", "-Og", "-gnata", "-gnatVa", "-pie");
-      Prod_Switches := Common_Switches & ("-O3", "-gnatp", "-ffast-math");
+      Prod_Switches := Common_Switches & ("-O3", "-gnatp", "-ffast-math", "-gnatwe");
       Coverage_Switches := Dev_Switches & ("-fprofile-arcs", "-ftest-coverage");
 
       case Build_Mode is

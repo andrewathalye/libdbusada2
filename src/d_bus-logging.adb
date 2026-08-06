@@ -11,8 +11,15 @@ with GNAT.Traceback;
 with GNATCOLL.Terminal;
 
 package body D_Bus.Logging is
-   Debug : constant Boolean := True;
-   --  TODO dynamically enable / disable
+   ---------------
+   -- Debugging --
+   ---------------
+   Debug : Boolean := False;
+
+   procedure Set_Debug (State : Boolean) is
+   begin
+      Debug := State;
+   end Set_Debug;
 
    ---------
    -- Log --

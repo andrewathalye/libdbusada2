@@ -31,9 +31,8 @@ package D_Bus.Types.Containers is
    --  Produce an Empty Struct with signature `Signature`
    --  All elements must be set before the type can be used.
 
-   function Get
-     (Container : Struct; Index : Positive) return Root_Type'Class with
-     Pre => not Is_Empty (Container);
+   function Get (Container : Struct; Index : Positive) return Root_Type'Class
+   with Pre => not Is_Empty (Container);
    --  Get element `Index` in `Container`
    --  `Index` must be within the bounds of `Container`
 
@@ -46,28 +45,31 @@ package D_Bus.Types.Containers is
    function Count (Container : Struct) return Positive;
    --  Return the number of elements in `Container`
 
-   overriding function Signature (X : Struct) return Single_Signature;
-   overriding function Image (X : Struct) return String with
-     Pre => not Is_Empty (X);
-   overriding function Contents (X : Struct) return Contents_Signature;
+   overriding
+   function Signature (X : Struct) return Single_Signature;
+   overriding
+   function Image (X : Struct) return String
+   with Pre => not Is_Empty (X);
+   overriding
+   function Contents (X : Struct) return Contents_Signature;
 
    --------------------------------
    -- Iterable Containers Shared --
    --------------------------------
-   type Constant_Reference_Type (X : not null access constant Root_Type'Class)
+   type Constant_Reference_Type
+     (X : not null access constant Root_Type'Class)
    is
-     limited private with
-     Implicit_Dereference => X;
+     limited private
+   with Implicit_Dereference => X;
 
-   type Reference_Type (X : not null access Root_Type'Class) is
-     limited private with
-     Implicit_Dereference => X;
+   type Reference_Type (X : not null access Root_Type'Class) is limited private
+   with Implicit_Dereference => X;
 
-     ------------
-     -- Arrays --
-     ------------
-     --  Note: Aggregate cannot be provided due to the discriminant
-     --  Create an array by signature or by calling `+` with an argument list
+   ------------
+   -- Arrays --
+   ------------
+   --  Note: Aggregate cannot be provided due to the discriminant
+   --  Create an array by signature or by calling `+` with an argument list
    type Array_Cursor (<>) is private;
    No_Index : constant Array_Cursor;
 
@@ -79,14 +81,17 @@ package D_Bus.Types.Containers is
 
    function Has_Element (Position : Array_Cursor) return Boolean;
 
-   package Array_Iterators is new Ada.Iterator_Interfaces
-     (Array_Cursor, Has_Element);
+   package Array_Iterators is new
+     Ada.Iterator_Interfaces (Array_Cursor, Has_Element);
    subtype Array_Iterator is Array_Iterators.Reversible_Iterator;
 
    type D_Array (Element_Signature : Interned_Single_Signature) is
-     new Container_Type and Array_Iterator with private with
+     new Container_Type
+     and Array_Iterator with private
+   with
      Constant_Indexing => Constant_Reference_A,
-     Variable_Indexing => Reference_A, Default_Iterator => Iterate,
+     Variable_Indexing => Reference_A,
+     Default_Iterator  => Iterate,
      Iterator_Element  => Root_Type'Class;
 
    function Constant_Reference_A
@@ -105,16 +110,19 @@ package D_Bus.Types.Containers is
      (Container : aliased in out D_Array; Position : Array_Cursor)
       return Reference_Type;
 
-   function Iterate (Container : D_Array) return Array_Iterator'Class is
-     (Container);
+   function Iterate (Container : D_Array) return Array_Iterator'Class
+   is (Container);
 
    procedure Append (Container : in out D_Array; Element : Root_Type'Class);
    --  Append `Element` to `Container`
    --  It must match the `Container`Ã¢ÂÂs signature
 
-   overriding function Signature (X : D_Array) return Single_Signature;
-   overriding function Image (X : D_Array) return String;
-   overriding function Contents (X : D_Array) return Contents_Signature;
+   overriding
+   function Signature (X : D_Array) return Single_Signature;
+   overriding
+   function Image (X : D_Array) return String;
+   overriding
+   function Contents (X : D_Array) return Contents_Signature;
 
    ------------------------
    --       Dicts        --
@@ -130,17 +138,18 @@ package D_Bus.Types.Containers is
 
    function Has_Element (Position : Dict_Cursor) return Boolean;
 
-   package Dict_Iterators is new Ada.Iterator_Interfaces
-     (Dict_Cursor, Has_Element);
+   package Dict_Iterators is new
+     Ada.Iterator_Interfaces (Dict_Cursor, Has_Element);
    subtype Dict_Iterator is Dict_Iterators.Forward_Iterator;
 
    type Dict
      (Key_Signature     : Basic_Signature_Element;
       Element_Signature : Interned_Single_Signature)
-   is
-     new Container_Type and Dict_Iterator with private with
+   is new Container_Type and Dict_Iterator with private
+   with
      Constant_Indexing => Constant_Reference_D,
-     Variable_Indexing => Reference_D, Default_Iterator => Iterate,
+     Variable_Indexing => Reference_D,
+     Default_Iterator  => Iterate,
      Iterator_Element  => Root_Type'Class;
 
    function Constant_Reference_D
@@ -159,19 +168,23 @@ package D_Bus.Types.Containers is
      (Container : aliased in out Dict; Position : Dict_Cursor)
       return Reference_Type;
 
-   function Iterate (Container : Dict) return Dict_Iterator'Class is
-     (Container);
+   function Iterate (Container : Dict) return Dict_Iterator'Class
+   is (Container);
 
    procedure Insert
-     (Container : in out Dict; Key : Basic_Type'Class;
-      Value     :        Root_Type'Class);
+     (Container : in out Dict;
+      Key       : Basic_Type'Class;
+      Value     : Root_Type'Class);
    --  Insert <Key, Value> into `Container`
    --  Key must match `Container`Ã¢ÂÂs key type
    --  Value must match `Container`Ã¢ÂÂs element type
 
-   overriding function Signature (X : Dict) return Single_Signature;
-   overriding function Image (X : Dict) return String;
-   overriding function Contents (X : Dict) return Contents_Signature;
+   overriding
+   function Signature (X : Dict) return Single_Signature;
+   overriding
+   function Image (X : Dict) return String;
+   overriding
+   function Contents (X : Dict) return Contents_Signature;
 
    --------------
    -- Variants --
@@ -180,27 +193,30 @@ package D_Bus.Types.Containers is
    --  Note: Must be assigned before using its value.
 
    function "+" (X : Root_Type'Class) return Variant;
-   function Get (X : Variant) return Root_Type'Class with
-     Pre => not Is_Empty (X);
+   function Get (X : Variant) return Root_Type'Class
+   with Pre => not Is_Empty (X);
    function "+" (X : Variant) return Root_Type'Class renames Get;
 
    function Is_Empty (Container : Variant) return Boolean;
    --  Checks whether the Variant contains a value.
    --  According to the specification, a Variant may not be empty.
 
-   overriding function Signature (X : Variant) return Single_Signature;
-   overriding function Image (X : Variant) return String with
-     Pre => not Is_Empty (X);
-   overriding function Contents (X : Variant) return Contents_Signature is
-     (Contents_Signature (X.Get.Signature)) with
-     Pre => not Is_Empty (X);
+   overriding
+   function Signature (X : Variant) return Single_Signature;
+   overriding
+   function Image (X : Variant) return String
+   with Pre => not Is_Empty (X);
+   overriding
+   function Contents (X : Variant) return Contents_Signature
+   is (Contents_Signature (X.Get.Signature))
+   with Pre => not Is_Empty (X);
 
 private
    ------------
    -- Shared --
    ------------
-   package Root_Type_Holders is new Ada.Containers.Indefinite_Holders
-     (Root_Type'Class);
+   package Root_Type_Holders is new
+     Ada.Containers.Indefinite_Holders (Root_Type'Class);
 
    ------------
    -- Struct --
@@ -211,29 +227,44 @@ private
       Signatures : Single_Signature_Array (1 .. Count);
       Elements   : Root_Type_Holder_Array (1 .. Count);
    end record;
+   for Struct'External_Tag use "D_Bus_Type_" & Struct_Start_CC;
+
+   overriding
+   function Alignment (X : Struct) return Padding_Alignment
+   is (8);
+
+   --  TODO not safe!
+   function Struct_Contents (S : Single_Signature) return Contents_Signature
+   is (Contents_Signature (S (S'First + 1 .. S'Last - 1)));
+
+   overriding
+   function Constructor
+     (Signature : not null access Single_Signature) return Struct
+   is (Empty (Struct_Contents (Signature.all)));
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Struct);
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Struct) with
-     Pre => not Is_Empty (Item);
+      Item   : Struct)
+   with Pre => not Is_Empty (Item);
 
    for Struct'Read use Read;
    for Struct'Write use Write;
 
-   overriding function Size
+   overriding
+   function Size
      (X : Struct; Count : Ada.Streams.Stream_Element_Count)
       return Ada.Streams.Stream_Element_Count;
 
    --------------------------
    -- Indexable Containers --
    --------------------------
-   type Constant_Reference_Type (X : not null access constant Root_Type'Class)
-   is
-   limited null record;
+   type Constant_Reference_Type
+     (X : not null access constant Root_Type'Class)
+   is limited null record;
 
    type Reference_Type (X : not null access Root_Type'Class) is
    limited null record;
@@ -249,16 +280,34 @@ private
 
    No_Index : constant Array_Cursor := (null, 0);
 
-   package Vectors is new Ada.Containers.Indefinite_Vectors
-     (Natural, Root_Type'Class);
+   package Vectors is new
+     Ada.Containers.Indefinite_Vectors (Natural, Root_Type'Class);
 
    type D_Array (Element_Signature : Interned_Single_Signature) is
-   new Container_Type and Array_Iterator with record
+     new Container_Type
+     and Array_Iterator
+   with record
       Inner : Vectors.Vector;
    end record;
+   for D_Array'External_Tag use "D_Bus_Type_" & Array_CC;
+   --  TODO with current implementation this will never be called
+
+   overriding
+   function Alignment (X : D_Array) return Padding_Alignment
+   is (4);
+   --  aX alignment for Uint32 length
+
+   overriding
+   function Constructor
+     (Signature : not null access Single_Signature) return D_Array
+   is (D_Array'
+         (Element_Signature =>
+            Intern
+              (Signature.all (Signature.all'First + 1 .. Signature.all'Last)),
+          others            => <>));
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out D_Array);
 
    procedure Write
@@ -268,14 +317,19 @@ private
    for D_Array'Read use Read;
    for D_Array'Write use Write;
 
-   overriding function First (Object : D_Array) return Array_Cursor;
-   overriding function Next
+   overriding
+   function First (Object : D_Array) return Array_Cursor;
+   overriding
+   function Next
      (Object : D_Array; Position : Array_Cursor) return Array_Cursor;
-   overriding function Previous
+   overriding
+   function Previous
      (Object : D_Array; Position : Array_Cursor) return Array_Cursor;
-   overriding function Last (Object : D_Array) return Array_Cursor;
+   overriding
+   function Last (Object : D_Array) return Array_Cursor;
 
-   overriding function Size
+   overriding
+   function Size
      (X : D_Array; Count : Ada.Streams.Stream_Element_Count)
       return Ada.Streams.Stream_Element_Count;
 
@@ -284,9 +338,12 @@ private
    -----------
    function Hash (Key : Basic_Type'Class) return Ada.Containers.Hash_Type;
 
-   package Hash_Maps is new Ada.Containers.Indefinite_Hashed_Maps
-     (Key_Type => Basic_Type'Class, Element_Type => Root_Type'Class,
-      Hash     => Hash, Equivalent_Keys => "=");
+   package Hash_Maps is new
+     Ada.Containers.Indefinite_Hashed_Maps
+       (Key_Type        => Basic_Type'Class,
+        Element_Type    => Root_Type'Class,
+        Hash            => Hash,
+        Equivalent_Keys => "=");
 
    type Dict_Cursor is new Hash_Maps.Cursor;
 
@@ -295,13 +352,27 @@ private
    type Dict
      (Key_Signature     : Basic_Signature_Element;
       Element_Signature : Interned_Single_Signature)
-   is
-   new Container_Type and Dict_Iterator with record
+   is new Container_Type and Dict_Iterator with record
       Inner : Hash_Maps.Map;
    end record;
+   for Dict'External_Tag use "D_Bus_Type_" & Array_CC & Dict_Start_CC;
+
+   overriding
+   function Alignment (X : Dict) return Padding_Alignment
+   is (4);
+   --  a{} alignment for Uint32 length
+
+   overriding
+   function Constructor
+     (Signature : not null access Single_Signature) return Dict
+   is (Dict'
+         (Key_Signature     => Signature.all (3),
+          Element_Signature =>
+            Intern (Signature.all (4 .. Signature.all'Last)),
+          others            => <>));
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Dict);
 
    procedure Write
@@ -311,13 +382,15 @@ private
    for Dict'Read use Read;
    for Dict'Write use Write;
 
-   overriding function First (Object : Dict) return Dict_Cursor is
-     (Dict_Cursor (Object.Inner.First));
-   overriding function Next
-     (Object : Dict; Position : Dict_Cursor) return Dict_Cursor is
-     (Dict_Cursor (Hash_Maps.Next (Hash_Maps.Cursor (Position))));
+   overriding
+   function First (Object : Dict) return Dict_Cursor
+   is (Dict_Cursor (Object.Inner.First));
+   overriding
+   function Next (Object : Dict; Position : Dict_Cursor) return Dict_Cursor
+   is (Dict_Cursor (Hash_Maps.Next (Hash_Maps.Cursor (Position))));
 
-   overriding function Size
+   overriding
+   function Size
      (X : Dict; Count : Ada.Streams.Stream_Element_Count)
       return Ada.Streams.Stream_Element_Count;
 
@@ -327,24 +400,34 @@ private
    type Variant is new Container_Type with record
       I : Root_Type_Holders.Holder;
    end record;
+   for Variant'External_Tag use "D_Bus_Type_" & Variant_CC;
 
-   overriding function Size
+   overriding function Alignment (X : Variant) return Padding_Alignment is (1);
+   --  v alignment for first byte in signature
+
+   overriding
+   function Constructor
+     (Signature : not null access Single_Signature) return Variant
+   is (Variant'(others => <>));
+
+   overriding
+   function Size
      (X : Variant; Count : Ada.Streams.Stream_Element_Count)
-      return Ada.Streams.Stream_Element_Count with
-     Pre => not Is_Empty (X);
+      return Ada.Streams.Stream_Element_Count
+   with Pre => not Is_Empty (X);
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Variant);
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Variant) with
-     Pre => not Is_Empty (Item);
+      Item   : Variant)
+   with Pre => not Is_Empty (Item);
 
    for Variant'Read use Read;
    for Variant'Write use Write;
 
-   function Is_Empty (Container : Variant) return Boolean is
-     (Container.I.Is_Empty);
+   function Is_Empty (Container : Variant) return Boolean
+   is (Container.I.Is_Empty);
 end D_Bus.Types.Containers;

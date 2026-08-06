@@ -1,13 +1,14 @@
 pragma Ada_2012;
 
+with Ada.Strings;
+with Ada.Strings.Fixed;
 with Ada.Unchecked_Conversion;
 
+with D_Bus.Logging; use D_Bus.Logging;
 with D_Bus.Streams;
 with Interfaces;
 with System;
-
 with D_Bus.Types.Basic_Generic;
-with D_Bus.Types.Dispatching_Read;
 
 package body D_Bus.Messages is
    --------------------
@@ -22,28 +23,30 @@ package body D_Bus.Messages is
    protected body Global_Serials is
       procedure Next_Serial (S : out Valid_Message_Serial) is
       begin
-         S              := Current_Serial;
+         S := Current_Serial;
          Current_Serial := Current_Serial + 1;
       end Next_Serial;
    end Global_Serials;
 
-   package D_Message_Serials is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
-     (Type_Code => D_Bus.Types.Uint32_CC, Inner => U_Message_Serial);
+   package D_Message_Serials is new
+     D_Bus.Types.Basic_Generic.Discrete_Wrappers
+       (Type_Code => D_Bus.Types.Uint32_CC,
+        Inner     => U_Message_Serial);
    subtype D_Message_Serial is D_Message_Serials.Outer;
 
    -------------------
    -- Message Flags --
    -------------------
-   type Message_Flags_Ersatz is mod 2**8;
+   type Message_Flags_Ersatz is mod 2 ** 8;
    for Message_Flags_Ersatz'Size use 8;
 
-   function To_Ersatz is new Ada.Unchecked_Conversion
-     (Message_Flags, Message_Flags_Ersatz);
-   function To_Object is new Ada.Unchecked_Conversion
-     (Message_Flags_Ersatz, Message_Flags);
+   function To_Ersatz is new
+     Ada.Unchecked_Conversion (Message_Flags, Message_Flags_Ersatz);
+   function To_Object is new
+     Ada.Unchecked_Conversion (Message_Flags_Ersatz, Message_Flags);
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Message_Flags)
    is
       Ersatz : Message_Flags_Ersatz;
@@ -54,8 +57,7 @@ package body D_Bus.Messages is
 
    procedure Write
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Message_Flags)
-   is
+      Item   : Message_Flags) is
    begin
       Message_Flags_Ersatz'Write (Stream, To_Ersatz (Item));
    end Write;
@@ -74,16 +76,27 @@ package body D_Bus.Messages is
    -- Compose_Call --
    ------------------
    function Compose_Call
-     (Flags       : Message_Flags                    := Default_Message_Flags;
+     (Flags       : Message_Flags := Default_Message_Flags;
       Path        : D_Bus.Types.Basic.Object_Path;
       M_Interface : D_Bus.Types.Extra.Interface_Name := "";
       Member      : D_Bus.Types.Extra.Member_Name;
-      Destination : D_Bus.Types.Extra.Bus_Name       := "") return Message
+      Destination : D_Bus.Types.Extra.Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_Object_Path;
       use type D_Bus.Types.Basic.D_String;
       Fields : Field_Maps.Map;
    begin
+      Log
+        (Info,
+         "Compose call to "
+         & M_Interface
+         & "."
+         & Member
+         & " on "
+         & String (Path)
+         & " @ "
+         & String (Destination));
+
       Fields.Insert (F_Path, +(+Path));
       Fields.Insert (F_Interface, +(+M_Interface));
       Fields.Insert (F_Member, +(+Member));
@@ -93,7 +106,10 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => Method_Call, Flags => Flags, Fields => Fields,
+        (Serial    => <>,
+         M_Type    => Method_Call,
+         Flags     => Flags,
+         Fields    => Fields,
          Arguments => <>);
    end Compose_Call;
 
@@ -101,13 +117,25 @@ package body D_Bus.Messages is
    -- Compose_Return --
    --------------------
    function Compose_Return
-     (Flags       : Message_Flags := Default_Message_Flags; Reply_To : Message;
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Reply_To    : Message;
       Destination : D_Bus.Types.Extra.Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
       Fields : Field_Maps.Map;
    begin
+      Log
+        (Info,
+         "Compose return from "
+         & M_Interface (Reply_To)
+         & "."
+         & Member (Reply_To)
+         & " on "
+         & String (Path (Reply_To))
+         & " to "
+         & String (Destination));
+
       if Reply_To.Serial = Invalid_Serial or Reply_To.Flags.No_Reply_Expected
       then
          raise No_Reply_Expected;
@@ -120,22 +148,39 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => Method_Return, Flags => Flags,
-         Fields => Fields, Arguments => <>);
+        (Serial    => <>,
+         M_Type    => Method_Return,
+         Flags     => Flags,
+         Fields    => Fields,
+         Arguments => <>);
    end Compose_Return;
 
    -------------------
    -- Compose_Error --
    -------------------
    function Compose_Error
-     (Flags       : Message_Flags              := Default_Message_Flags;
-      Error       : D_Bus.Types.Extra.Error_Name; Reply_To : Message;
+     (Flags       : Message_Flags := Default_Message_Flags;
+      Error       : D_Bus.Types.Extra.Error_Name;
+      Reply_To    : Message;
       Destination : D_Bus.Types.Extra.Bus_Name := "") return Message
    is
       use type D_Bus.Types.Basic.D_String;
       use type D_Message_Serial;
       Fields : Field_Maps.Map;
    begin
+      Log
+        (Info,
+         "Compose error"
+         & String (Error)
+         & "from "
+         & M_Interface (Reply_To)
+         & "."
+         & Member (Reply_To)
+         & " on "
+         & String (Path (Reply_To))
+         & " to "
+         & Destination);
+
       if Reply_To.Serial = Invalid_Serial or Reply_To.Flags.No_Reply_Expected
       then
          raise No_Reply_Expected;
@@ -149,8 +194,11 @@ package body D_Bus.Messages is
       end if;
 
       return
-        (Serial => <>, M_Type => D_Bus.Messages.Error, Flags => Flags,
-         Fields => Fields, Arguments => <>);
+        (Serial    => <>,
+         M_Type    => D_Bus.Messages.Error,
+         Flags     => Flags,
+         Fields    => Fields,
+         Arguments => <>);
    end Compose_Error;
 
    --------------------
@@ -166,12 +214,25 @@ package body D_Bus.Messages is
       use type D_Bus.Types.Basic.D_String;
       Fields : Field_Maps.Map;
    begin
+      Log
+        (Info,
+         "Compose signal "
+         & " from "
+         & M_Interface
+         & "."
+         & Member
+         & " on "
+         & String (Path));
+
       Fields.Insert (F_Path, +(+Path));
       Fields.Insert (F_Interface, +(+M_Interface));
       Fields.Insert (F_Member, +(+Member));
 
       return
-        (Serial    => <>, M_Type => Signal, Flags => Flags, Fields => Fields,
+        (Serial    => <>,
+         M_Type    => Signal,
+         Flags     => Flags,
+         Fields    => Fields,
          Arguments => <>);
    end Compose_Signal;
 
@@ -179,8 +240,7 @@ package body D_Bus.Messages is
    -- Add_Arguments --
    -------------------
    procedure Add_Arguments
-     (M : in out Message; Arguments : D_Bus.Types.Argument_List)
-   is
+     (M : in out Message; Arguments : D_Bus.Types.Argument_List) is
    begin
       for A of Arguments loop
          M.Arguments.Append (A);
@@ -241,12 +301,14 @@ package body D_Bus.Messages is
    end Error;
 
    function Is_Reply (Original, Reply : Message) return Boolean is
+      use type D_Bus.Types.Basic.Uint32;
       Reply_RS : Valid_Message_Serial;
    begin
       Reply_RS :=
         Valid_Message_Serial
-          (D_Bus.Types.Basic.Uint32s."+"
-             (D_Bus.Types.Basic.Uint32 (Reply.Fields (F_Reply_Serial).Get)));
+          (Interfaces.Unsigned_32'
+             (+(D_Bus.Types.Basic.Uint32
+                  (Reply.Fields (F_Reply_Serial).Get))));
 
       return
         (not Original.Flags.No_Reply_Expected)
@@ -295,11 +357,13 @@ package body D_Bus.Messages is
 
    type ME_Table_From_Ada_T is array (System.Bit_Order) of Message_Endianness;
    ME_Table_From_Ada          : constant ME_Table_From_Ada_T := (Big, Little);
-   Default_Message_Endianness : constant Message_Endianness  :=
+   Default_Message_Endianness : constant Message_Endianness :=
      ME_Table_From_Ada (System.Default_Bit_Order);
 
-   package D_Field_Types is new D_Bus.Types.Basic_Generic.Discrete_Wrappers
-     (Type_Code => D_Bus.Types.Byte_CC, Inner => Field_Type);
+   package D_Field_Types is new
+     D_Bus.Types.Basic_Generic.Discrete_Wrappers
+       (Type_Code => D_Bus.Types.Byte_CC,
+        Inner     => Field_Type);
    subtype D_Field_Type is D_Field_Types.Outer;
 
    Field_Struct_Contents : constant D_Bus.Types.Contents_Signature := "yv";
@@ -308,7 +372,7 @@ package body D_Bus.Messages is
      D_Bus.Types.Containers.D_Array (D_Bus.Types.Intern ("(yv)"));
 
    type Raw_Message_Header is record
-      Endianness       : Message_Endianness    := Default_Message_Endianness;
+      Endianness       : Message_Endianness := Default_Message_Endianness;
       M_Type           : Message_Type;
       Flags            : Message_Flags;
       Protocol_Version : Interfaces.Unsigned_8 := Default_Protocol_Version;
@@ -318,7 +382,7 @@ package body D_Bus.Messages is
    end record;
 
    procedure Read_RMH
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Raw_Message_Header);
    --  Custom read procedure that checks endianness and protocol version
    for Raw_Message_Header'Read use Read_RMH;
@@ -330,7 +394,7 @@ package body D_Bus.Messages is
    for Raw_Message_Header'Write use Write_RMH;
 
    procedure Read_RMH
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Raw_Message_Header)
    is
       use type Interfaces.Unsigned_8;
@@ -359,8 +423,7 @@ package body D_Bus.Messages is
 
    procedure Write_RMH
      (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : Raw_Message_Header)
-   is
+      Item   : Raw_Message_Header) is
    begin
       Message_Endianness'Write (Stream, Item.Endianness);
       Message_Type'Write (Stream, Item.M_Type);
@@ -368,7 +431,6 @@ package body D_Bus.Messages is
       Interfaces.Unsigned_8'Write (Stream, Item.Protocol_Version);
 
       --  All further fields depend on endianness
-      --  TODO endianness
       D_Bus.Types.Basic.Uint32'Write (Stream, Item.Body_Length);
       D_Message_Serial'Write (Stream, Item.Serial);
       Field_Map_Raw'Write (Stream, Item.Fields);
@@ -378,7 +440,7 @@ package body D_Bus.Messages is
    end Write_RMH;
 
    procedure Read
-     (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : out Message)
    is
       use D_Bus.Types.Containers;
@@ -391,16 +453,20 @@ package body D_Bus.Messages is
       use type Interfaces.Unsigned_8;
       use type Interfaces.Unsigned_32;
 
-      function Field_From_Byte is new Ada.Unchecked_Conversion
-        (Interfaces.Unsigned_8, Field_Type);
+      function Field_From_Byte is new
+        Ada.Unchecked_Conversion (Interfaces.Unsigned_8, Field_Type);
 
       RMH : Raw_Message_Header;
    begin
+      Log (Info, "Read message");
+
       --  Note The array of UNIX file descriptors included with a Message
       --  is passed alongside the first byte of the message header by the
       --  reference D-Bus implementation. We must therefore copy this
       --  implementation for compatibility purposes.
-      --  TODO implement
+
+      --  TODO is this good?
+      D_Bus.Streams.Read_FDs (Stream);
 
       --  Read raw header
       --  Note: Alignment reset before this!
@@ -410,7 +476,7 @@ package body D_Bus.Messages is
 
       Item := (Serial => Valid_Message_Serial'(+RMH.Serial), others => <>);
       Item.M_Type := RMH.M_Type;
-      Item.Flags  := RMH.Flags;
+      Item.Flags := RMH.Flags;
 
       --  When we read the fields back we can only get bytes :(
       --  There is no way to automatically determine that the actual type
@@ -427,21 +493,21 @@ package body D_Bus.Messages is
 
       --  Check that the required fields are contained for each type
       case RMH.M_Type is
-         when Invalid =>
+         when Invalid       =>
             raise Protocol_Error;
 
-         when Method_Call =>
+         when Method_Call   =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
 
          when Method_Return =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
 
-         when Error =>
+         when Error         =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Reply_Serial));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Error_Name));
 
-         when Signal =>
+         when Signal        =>
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Path));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Interface));
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
@@ -460,16 +526,66 @@ package body D_Bus.Messages is
              (+D_Bus.Types.Basic.D_Signature (Item.Fields (F_Signature).Get));
       begin
          for Signature of Types loop
-            Item.Arguments.Append
-              (D_Bus.Types.Dispatching_Read (Stream, Signature.all));
+            declare
+               Element : D_Bus.Types.Root_Type'Class :=
+                 D_Bus.Types.Dispatching_Construct (Signature.all);
+            begin
+               D_Bus.Types.Root_Type'Read (Stream, Element);
+               Item.Arguments.Append (Element);
+            end;
          end loop;
       end;
 
-      --  TODO rewrite file descriptors based upon received array
+      --  Handle File Descriptors Recursively
+      Handle_FDs :
+      declare
+         procedure Check_FDs (Arg : in out D_Bus.Types.Root_Type'Class);
+         procedure Check_FDs (Arg : in out D_Bus.Types.Root_Type'Class)
+         is
+            use D_Bus.Types.Basic;
+            use D_Bus.Types.Containers;
+         begin
+            --  Don’t check anything unnecessary
+            if Ada.Strings.Fixed.Index (String (Arg.Signature), "h") = 0 then
+               return;
+            end if;
+
+            --  Redeem directly
+            if Arg in File_Descriptor'Class then
+               File_Descriptor'Class (Arg).Redeem (Stream);
+
+            --  Search struct
+            elsif Arg in Struct'Class then
+               for I in 1 .. Struct'Class (Arg).Count loop
+
+            --  Search array
+            elsif Arg in D_Bus.Types.Containers.D_Array'Class then
+               for E of Arg loop
+                  Check_FDs (E);
+               end loop;
+
+            --  Search dict
+            elsif Arg in D_Bus.Types.Containers.Dict'Class then
+               for I in Arg.Iterate loop
+                  Check_FDs (D_Bus.Types.Containers.Key (I));
+                  Check_FDs (D_Bus.Types.Containers.Element (I));
+               end loop;
+
+            --  Search variant
+            elsif Arg in D_Bus.Types.Containers.Variant'Class then
+               Check_FDs (D_Bus.Types.Containers.Variant'Class (Arg).Get);
+            end if;
+         end Check_FDs;
+      begin
+         for Arg of Item.Arguments loop
+            Check_FDs (Arg);
+         end loop;
+      end Handle_FDs;
+      D_Bus.Streams.Clear_FDs (Stream);
    end Read;
 
    procedure Write
-     (Stream :        not null access Ada.Streams.Root_Stream_Type'Class;
+     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
       Item   : in out Message)
    is
       use type D_Message_Serial;
@@ -478,21 +594,28 @@ package body D_Bus.Messages is
       use type D_Bus.Types.Basic.D_Signature;
       use type D_Bus.Types.Basic.Uint32;
 
+      use type Interfaces.Unsigned_32;
+
       RMH : Raw_Message_Header;
       S   : Valid_Message_Serial;
    begin
+      Logging.Log (Info, "Send message");
+
       --  Make serial
       Global_Serials.Next_Serial (S);
       Item :=
-        (Serial => S, M_Type => Item.M_Type, Flags => Item.Flags,
-         Fields => Item.Fields, Arguments => Item.Arguments);
+        (Serial    => S,
+         M_Type    => Item.M_Type,
+         Flags     => Item.Flags,
+         Fields    => Item.Fields,
+         Arguments => Item.Arguments);
 
       --  Prepare header
-      RMH.M_Type      := Item.M_Type;
-      RMH.Flags       := Item.Flags;
+      RMH.M_Type := Item.M_Type;
+      RMH.Flags := Item.Flags;
       RMH.Body_Length :=
         +Interfaces.Unsigned_32 (D_Bus.Types.Size (Item.Arguments));
-      RMH.Serial      := +Item.Serial;
+      RMH.Serial := +Item.Serial;
 
       --  Add all standard fields
       for Cursor in Item.Fields.Iterate loop
@@ -509,8 +632,7 @@ package body D_Bus.Messages is
       end loop;
 
       --  Add calculated fields
-      Add_Calculated_Fields :
-      begin
+      Add_Calculated_Fields : begin
          --  F_Signature (if there are arguments)
          if not Item.Arguments.Is_Empty then
             declare
@@ -525,8 +647,22 @@ package body D_Bus.Messages is
             end;
          end if;
 
-         --  F_Unix_Fds (if the message contains UNIX file descriptors)
-         --  TODO
+         --  F_Unix_FDs (if the message contains UNIX file descriptors)
+         if D_Bus.Streams.FD_Count (Stream) > 0 then
+            declare
+               use D_Bus.Types.Containers;
+
+               S : Struct := Empty (Field_Struct_Contents);
+            begin
+               S.Set (1, +F_Unix_Fds);
+               S.Set
+                 (2,
+                  +(D_Bus.Types.Basic.Uint32'
+                      (+D_Bus.Streams.FD_Count (Stream))));
+
+               RMH.Fields.Append (S);
+            end;
+         end if;
       end Add_Calculated_Fields;
 
       --  Note The reference D-Bus implementation writes its array of UNIX
@@ -543,5 +679,7 @@ package body D_Bus.Messages is
       for Element of Item.Arguments loop
          D_Bus.Types.Root_Type'Class'Write (Stream, Element);
       end loop;
+
+      D_Bus.Streams.Clear_FDs (Stream);
    end Write;
 end D_Bus.Messages;

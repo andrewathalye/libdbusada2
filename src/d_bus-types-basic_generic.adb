@@ -46,6 +46,12 @@ package body D_Bus.Types.Basic_Generic is
       function "+" (X : External_Type) return Outer is
          IT : Internal_Type (X'Length);
       begin
+         for C of X loop
+            if C = ASCII.NUL then
+               raise Invalid_D_Bus_String;
+            end if;
+         end loop;
+
          IT.S := Internal_Raw_String (X);
          return (I => ITH.To_Holder (IT));
       end "+";

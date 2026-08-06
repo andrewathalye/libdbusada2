@@ -1,4 +1,7 @@
 package body D_Bus.Streams is
+   ---------------
+   -- Alignment --
+   ---------------
    procedure Read_Align
      (Stream    : not null access Possible_Alignable_Stream;
       Alignment : Alignment_Type)
@@ -32,4 +35,48 @@ package body D_Bus.Streams is
       return Discrepancy;
    end Alignment_Bytes;
 
+   ----------------------
+   -- File Descriptors --
+   ----------------------
+   function Retrieve_FD
+     (Stream : not null access Possible_Alignable_Stream;
+      Index  : Interfaces.Unsigned_32) return GNAT.OS_Lib.File_Descriptor
+   is
+   begin
+      return Alignable_Stream'Class (Stream.all)'Access.Retrieve_FD (Index);
+   end Retrieve_FD;
+
+   function Store_FD
+     (Stream : not null access Possible_Alignable_Stream;
+      FD     : GNAT.OS_Lib.File_Descriptor) return Interfaces.Unsigned_32
+   is
+   begin
+      return Alignable_Stream'Class (Stream.all)'Access.Store_FD (FD);
+   end Store_FD;
+
+   procedure Clear_FDs (Stream : not null access Possible_Alignable_Stream)
+   is
+   begin
+      Alignable_Stream'Class (Stream.all)'Access.Clear_FDs;
+   end Clear_FDs;
+
+   procedure Read_FDs (Stream : not null access Possible_Alignable_Stream)
+   is
+   begin
+      Alignable_Stream'Class (Stream.all)'Access.Read_FDs;
+   end Read_FDs;
+
+   procedure Write_FDs (Stream : not null access Possible_Alignable_Stream)
+   is
+   begin
+      Alignable_Stream'Class (Stream.all)'Access.Write_FDs;
+   end Write_FDs;
+
+   function FD_Count
+     (Stream : not null access Possible_Alignable_Stream)
+      return Interfaces.Unsigned_32
+   is
+   begin
+      return Alignable_Stream'Class (Stream.all)'Access.FD_Count;
+   end FD_Count;
 end D_Bus.Streams;

@@ -1,9 +1,12 @@
 pragma Ada_2012;
 
+with Ada.Containers;
+with Ada.Containers.Vectors;
 with Ada.Environment_Variables;
 with Ada.Streams;
 
 with D_Bus.Types.Extra;
+with GNAT.OS_Lib;
 with GNAT.Sockets;
 
 with D_Bus.Messages;
@@ -61,6 +64,14 @@ package D_Bus.Connection is
    --
    --  Wait up to `Timeout` time for data to be available.
 
+   -------------------
+   -- Compatibility --
+   -------------------
+   function File_Descriptor_Passing_Support
+     (C : Connected_Connection) return Boolean;
+   --  Check whether `C` supports UNIX File Descriptor transfers.
+   --  This requires support at both ends of the connection.
+
    -------------------------------
    -- Standard Server Addresses --
    -------------------------------
@@ -114,11 +125,19 @@ private
    --  this is, IMO, a flaw in the specification, but nevertheless we
    --  need to be standards-compliant.
 
+
+   -------------------
+   --  Stream Impl  --
+   -------------------
+   package FD_Vectors is new Ada.Containers.Vectors (Natural, GNAT.OS_Lib.File_Descriptor);
+   subtype FD_Vector is FD_Vectors.Vector;
+
    type Canonical_Alignable_Stream is
    new D_Bus.Streams.Alignable_Stream with record
       Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
+      FDs         : FD_Vector;
    end record;
 
    overriding procedure Read_Align
@@ -138,6 +157,9 @@ private
      (Stream : in out Canonical_Alignable_Stream;
       Item   :        Ada.Streams.Stream_Element_Array);
 
+   ------------------------
+   --  Connection Itself --
+   ------------------------
    type Connection is record
       Socket          : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
       UUID            : D_Bus.Types.UUID := (others => Character'First);
@@ -145,14 +167,6 @@ private
    end record;
 
    type Mode_Type is (Connect, Listen);
-
-   -------------------
-   -- Compatibility --
-   -------------------
-   function File_Descriptor_Passing_Support
-     (C : Connected_Connection) return Boolean;
-   --  Check whether `C` supports UNIX File Descriptor transfers.
-   --  This requires support at both ends of the connection.
 
    ------------------
    -- Random UUIDs --

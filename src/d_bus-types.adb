@@ -3,6 +3,8 @@ pragma Ada_2022;
 with Ada.Containers.Indefinite_Hashed_Sets;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Strings.Hash;
+with Ada.Tags;
+with Ada.Tags.Generic_Dispatching_Constructor;
 with Ada.Unchecked_Conversion;
 
 with GNATCOLL.Strings;
@@ -31,7 +33,7 @@ package body D_Bus.Types is
           (U_Contents_Signature_Access,
            Interned_Single_Signature);
 
-      Cursor : Signature_Sets.Cursor;
+      Cursor   : Signature_Sets.Cursor;
       Inserted : Boolean;
    begin
       Interned_Strings.Insert (U_Contents_Signature (X), Cursor, Inserted);
@@ -45,7 +47,7 @@ package body D_Bus.Types is
           (U_Contents_Signature_Access,
            Interned_Contents_Signature);
 
-      Cursor : Signature_Sets.Cursor;
+      Cursor   : Signature_Sets.Cursor;
       Inserted : Boolean;
    begin
       Interned_Strings.Insert (X, Cursor, Inserted);
@@ -91,10 +93,10 @@ package body D_Bus.Types is
                            when Struct_Start_CC =>
                               Paren_Count := Paren_Count + 1;
 
-                           when Struct_End_CC =>
+                           when Struct_End_CC   =>
                               Paren_Count := Paren_Count - 1;
 
-                           when others =>
+                           when others          =>
                               null;
                         end case;
 
@@ -106,9 +108,9 @@ package body D_Bus.Types is
                   end;
                   raise Constraint_Error;
 
-                  --  Add arrays and dicts
+               --  Add arrays and dicts
 
-               when Array_CC =>
+               when Array_CC        =>
                   --  Error if remaining length is too short for array
                   if First = X'Last then
                      raise Constraint_Error;
@@ -128,10 +130,10 @@ package body D_Bus.Types is
                                  when Dict_Start_CC =>
                                     Bracket_Count := Bracket_Count + 1;
 
-                                 when Dict_End_CC =>
+                                 when Dict_End_CC   =>
                                     Bracket_Count := Bracket_Count - 1;
 
-                                 when others =>
+                                 when others        =>
                                     null;
                               end case;
 
@@ -143,17 +145,17 @@ package body D_Bus.Types is
                            raise Constraint_Error;
                         end;
 
-                        --  Normal Array, checked via recursive call
+                     --  Normal Array, checked via recursive call
 
-                     when others =>
+                     when others        =>
                         return
                           Array_CC
                           & Read_Single_Signature
                               (First => I + 1, Last => Last);
                   end case;
-                  --  No other valid elements
+               --  No other valid elements
 
-               when others =>
+               when others          =>
                   raise Constraint_Error;
             end case;
          end loop;
@@ -210,7 +212,7 @@ package body D_Bus.Types is
 
       --  Full check of complex types
       case X (X'First) is
-         when Array_CC =>
+         when Array_CC        =>
             --  Minimum length
             if X'Length < 2 then
                return False;
@@ -265,7 +267,7 @@ package body D_Bus.Types is
                   return False;
             end;
 
-         when others =>
+         when others          =>
             return False;
       end case;
 
@@ -312,6 +314,40 @@ package body D_Bus.Types is
       return L.Image = R.Image;
    end "=";
 
+   -----------------------------
+   -- Dispatching Constructor --
+   -----------------------------
+   function Construct is new
+     Ada.Tags.Generic_Dispatching_Constructor
+       (Root_Type,
+        Single_Signature,
+        Constructor);
+
+   function Dispatching_Construct
+     (Signature : Single_Signature) return Root_Type'Class
+   is
+      --  Correctly handle dicts
+      function Calculate_Tag return String;
+      function Calculate_Tag return String is
+      begin
+         if Signature'Length >= 2
+           and then
+             U_Single_Signature
+               (Signature (Signature'First .. Signature'First + 1))
+             = "a{"
+         then
+            return "a{";
+         else
+            return String (Signature (Signature'First .. Signature'First));
+         end if;
+      end Calculate_Tag;
+   begin
+      return
+        Construct
+          (Ada.Tags.Internal_Tag ("D_Bus_Type_" & Calculate_Tag),
+           Intern (Signature).all'Unrestricted_Access);
+   end Dispatching_Construct;
+
    --------------------
    -- Argument Lists --
    --------------------
@@ -334,25 +370,5 @@ package body D_Bus.Types is
       end loop;
       return Counter;
    end Size;
-
-   -------------
-   -- Padding --
-   -------------
-   function Alignment_For (CC : Signature_Element) return Padding_Alignment
-   is (case CC is
-         when Byte_CC => 1,
-         when Boolean_CC => 4,
-         when Int16_CC | Uint16_CC => 2,
-         when Int32_CC | Uint32_CC => 4,
-         when Int64_CC | Uint64_CC => 8,
-         when Double_CC => 8,
-         when String_CC => Alignment_For (Uint32_CC),
-         when Object_Path_CC => Alignment_For (Uint32_CC),
-         when Signature_CC => Alignment_For (Byte_CC),
-         when Array_CC => Alignment_For (Uint32_CC),
-         when Struct_Start_CC => 8,
-         when Variant_CC => Alignment_For (Signature_CC),
-         when File_Descriptor_CC => 4,
-         when others => raise Program_Error);
 
 end D_Bus.Types;
