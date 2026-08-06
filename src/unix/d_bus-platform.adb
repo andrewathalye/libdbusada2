@@ -134,7 +134,11 @@ package body D_Bus.Platform is
       begin
          Log (Info, "Write FDs");
 
-         --  TODO what happens if fds length is zero?
+         if FDs'Length = 0 then
+            Log (Error, "No FDs to write");
+            return;
+         end if;
+
          if not Write_FDs_C
              (Socket => GNAT.Sockets.To_C (Socket),
               FDs    => FDs (FDs'First)'Access, FD_Count => FDs'Length,

@@ -3,10 +3,10 @@ pragma Ada_2022;
 with Ada.Containers.Indefinite_Hashed_Sets;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Strings.Hash;
-with Ada.Tags;
 with Ada.Tags.Generic_Dispatching_Constructor;
 with Ada.Unchecked_Conversion;
 
+with D_Bus.Types.Containers;
 with GNATCOLL.Strings;
 
 package body D_Bus.Types is
@@ -313,6 +313,54 @@ package body D_Bus.Types is
 
       return L.Image = R.Image;
    end "=";
+
+
+   -----------------------
+   -- Generic Iteration --
+   -----------------------
+   procedure For_Each
+     (X : in out Container_Type'Class; Apply : Apply_Procedure)
+   is
+      use D_Bus.Types.Containers;
+   begin
+      if X in Struct'Class then
+         for I in 1 .. Struct'Class (X).Count loop
+            declare
+               Obj : Root_Type'Class := Struct'Class (X).Get (I);
+            begin
+               Apply (Obj);
+               Struct'Class (X).Set (I, Obj);
+            end;
+         end loop;
+      elsif X in D_Array'Class then
+         for Obj of D_Array'Class (X) loop
+            Apply (Obj);
+         end loop;
+      elsif X in Dict'Class then
+         --  TODO may cause problems, check?
+         for Cur in Dict'Class (X).Iterate loop
+            declare
+               K : Basic_Type'Class := Key (Cur);
+               V : Root_Type'Class := Element (Cur);
+            begin
+               Apply (K);
+               Apply (V);
+               Dict'Class (X).Delete (Key (Cur));
+               Dict'Class (X).Insert (K, V);
+            end;
+         end loop;
+      elsif X in Variant'Class then
+         --  TODO what if someone derives from Variant?
+         declare
+            Obj : Root_Type'Class := Variant'Class (X).Get;
+         begin
+            Apply (Obj);
+            X := Container_Type'Class (+Obj);
+         end;
+      else
+         raise Unsupported_Container;
+      end if;
+   end For_Each;
 
    -----------------------------
    -- Dispatching Constructor --

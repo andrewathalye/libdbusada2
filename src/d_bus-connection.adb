@@ -4,6 +4,8 @@ with Ada.IO_Exceptions;
 with Ada.Real_Time;
 with Ada.Numerics.Discrete_Random;
 
+with Interfaces;
+
 with D_Bus.Connection.Parse_Address;
 with D_Bus.Connection.Try_Authenticate;
 with D_Bus.Platform;
@@ -25,7 +27,7 @@ package body D_Bus.Connection is
    procedure Move (Input : in out Connection; Output : out Connection) is
    begin
       Output := Input;
-      Input  := (others => <>);
+      Input := (others => <>);
    end Move;
 
    -------------
@@ -46,8 +48,7 @@ package body D_Bus.Connection is
 
    procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
-      Alignment : D_Bus.Streams.Alignment_Type)
-   is
+      Alignment : D_Bus.Streams.Alignment_Type) is
    begin
       for I in
         1 .. D_Bus.Streams.Alignment_Bytes (Stream.Write_Count, Alignment)
@@ -56,10 +57,11 @@ package body D_Bus.Connection is
       end loop;
    end Write_Align;
 
-   overriding procedure Read
+   overriding
+   procedure Read
      (Stream : in out Canonical_Alignable_Stream;
-      Item   :    out Ada.Streams.Stream_Element_Array;
-      Last   :    out Ada.Streams.Stream_Element_Offset)
+      Item   : out Ada.Streams.Stream_Element_Array;
+      Last   : out Ada.Streams.Stream_Element_Offset)
    is
       use type Ada.Streams.Stream_Element_Offset;
    begin
@@ -69,9 +71,10 @@ package body D_Bus.Connection is
       Stream.Read_Count := Stream.Read_Count + Last;
    end Read;
 
-   overriding procedure Write
+   overriding
+   procedure Write
      (Stream : in out Canonical_Alignable_Stream;
-      Item   :        Ada.Streams.Stream_Element_Array)
+      Item   : Ada.Streams.Stream_Element_Array)
    is
       use type Ada.Streams.Stream_Element_Offset;
 
@@ -87,6 +90,72 @@ package body D_Bus.Connection is
       end if;
    end Write;
 
+   ----------------------
+   -- File Descriptors --
+   ----------------------
+   overriding
+   function Retrieve_FD
+     (Stream : not null access Canonical_Alignable_Stream; Index : Natural)
+      return GNAT.OS_Lib.File_Descriptor
+   is
+   begin
+      if Natural (Stream.FDs.Length) >= Index then
+         return Stream.FDs (Index);
+      end if;
+
+      --  TODO handle in Messages
+      raise D_Bus.Streams.FD_Slot_Empty with Index'Image;
+   end Retrieve_FD;
+
+   overriding
+   function Store_FD
+     (Stream : not null access Canonical_Alignable_Stream;
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural is
+   begin
+      --  TODO thread safe?
+      Stream.FDs.Append (FD);
+      return Natural (Stream.FDs.Length);
+   end Store_FD;
+
+   overriding
+   procedure Clear_FDs (Stream : not null access Canonical_Alignable_Stream) is
+   begin
+      Stream.FDs.Clear;
+   end Clear_FDs;
+
+   package Byte_FDs is new
+     D_Bus.Platform.File_Descriptor_Passing (Interfaces.Unsigned_8);
+
+   overriding
+   procedure Read_FDs (Stream : not null access Canonical_Alignable_Stream) is
+      Token    : Interfaces.Unsigned_8;
+      FD_Array : constant D_Bus.Platform.File_Descriptor_Array :=
+        Byte_FDs.Read_FDs (Stream.Connection.Socket, Token);
+   begin
+      for FD of FD_Array loop
+         Stream.FDs.Append (FD);
+      end loop;
+   end Read_FDs;
+
+   overriding
+   procedure Write_FDs (Stream : not null access Canonical_Alignable_Stream) is
+      Token    : constant Interfaces.Unsigned_8 := 0;
+      FD_Array :
+        D_Bus.Platform.File_Descriptor_Array
+          (1 .. Natural (Stream.FDs.Length));
+   begin
+      for I in 1 .. FD_Array'Last loop
+         FD_Array (I) := Stream.FDs (I);
+      end loop;
+
+      Byte_FDs.Write_FDs (Stream.Connection.Socket, FD_Array, Token);
+   end Write_FDs;
+
+   overriding
+   function FD_Count
+     (Stream : not null access Canonical_Alignable_Stream) return Natural
+   is (Natural (Stream.FDs.Length));
+
    --------------
    -- Messages --
    --------------
@@ -95,8 +164,8 @@ package body D_Bus.Connection is
    is
    begin
       return
-        (Ada.Streams.Root_Stream_Type with Connection => C'Unrestricted_Access,
-         others                                       => <>);
+        (Ada.Streams.Root_Stream_Type
+         with Connection => C'Unrestricted_Access, others => <>);
    end Stream;
 
    --  Note: Making a fresh stream also resets alignment, which is ideal.
@@ -125,8 +194,11 @@ package body D_Bus.Connection is
    begin
       GNAT.Sockets.Set (R_Set, C.Socket);
       GNAT.Sockets.Check_Selector
-        (Selector     => GNAT.Sockets.Null_Selector, R_Socket_Set => R_Set,
-         W_Socket_Set => W_Set, Status => Status, Timeout => Timeout);
+        (Selector     => GNAT.Sockets.Null_Selector,
+         R_Socket_Set => R_Set,
+         W_Socket_Set => W_Set,
+         Status       => Status,
+         Timeout      => Timeout);
 
       return Status = GNAT.Sockets.Completed;
    end Can_Read;
@@ -135,9 +207,9 @@ package body D_Bus.Connection is
    -- FD Passing --
    ----------------
    function File_Descriptor_Passing_Support
-     (C : Connected_Connection) return Boolean is
-     (C.Unix_Fd_Support and
-      D_Bus.Platform.File_Descriptor_Passing_Support (C.Socket));
+     (C : Connected_Connection) return Boolean
+   is (C.Unix_Fd_Support
+       and D_Bus.Platform.File_Descriptor_Passing_Support (C.Socket));
 
    --------------------
    -- Random Numbers --
@@ -156,15 +228,15 @@ package body D_Bus.Connection is
          Seconds : Seconds_Count;
          TS      : Time_Span;
 
-         type Unsigned_Seconds is mod 2**Seconds_Count'Size;
-         type Unsigned_Integer is mod 2**Integer'Size / 2;
+         type Unsigned_Seconds is mod 2 ** Seconds_Count'Size;
+         type Unsigned_Integer is mod 2 ** Integer'Size / 2;
          Seed : Integer;
       begin
          Split (Clock, Seconds, TS);
          Seed :=
            Integer
-             (Unsigned_Seconds (Seconds) and
-              Unsigned_Seconds (Unsigned_Integer'Last));
+             (Unsigned_Seconds (Seconds)
+              and Unsigned_Seconds (Unsigned_Integer'Last));
          Character_Random.Reset (Generator, Seed);
       end Seed;
 
@@ -242,8 +314,8 @@ package body D_Bus.Connection is
 
          Log
            (Warning,
-            ("Accept connection from client TODO" &
-             GNAT.Sockets.Image (Client_Addr)));
+            ("Accept connection from client TODO"
+             & GNAT.Sockets.Image (Client_Addr)));
 
          --  No need to separately close Unconnected_Socket?
          --  TODO

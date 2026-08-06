@@ -366,6 +366,11 @@ package body D_Bus.Types.Containers is
       Container.Inner.Append (Element);
    end Append;
 
+   procedure Delete (Container : in out D_Array; Index : Positive) is
+   begin
+      Container.Inner.Delete (Index);
+   end Delete;
+
    overriding
    function Contents (X : D_Array) return Contents_Signature is
    begin
@@ -487,6 +492,12 @@ package body D_Bus.Types.Containers is
       Type_Check (Container.Element_Signature.all, Value.Signature);
       Container.Inner.Insert (Key, Value);
    end Insert;
+
+   procedure Delete (Container : in out Dict; Key : Basic_Type'Class) is
+   begin
+      Type_Check ((1 => Container.Key_Signature), Key.Signature);
+      Container.Inner.Delete (Key);
+   end Delete;
 
    overriding
    function Size

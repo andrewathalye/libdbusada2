@@ -46,7 +46,6 @@ package D_Bus.Types.Basic_Generic is
       function Signature (X : Outer) return Single_Signature
       is (1 => Type_Code);
 
-      use type Ada.Streams.Stream_Element_Offset;
       overriding
       function Size
         (X : Outer; Count : Ada.Streams.Stream_Element_Count)

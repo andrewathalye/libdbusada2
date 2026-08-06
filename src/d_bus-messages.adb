@@ -1,7 +1,5 @@
 pragma Ada_2012;
 
-with Ada.Strings;
-with Ada.Strings.Fixed;
 with Ada.Unchecked_Conversion;
 
 with D_Bus.Logging; use D_Bus.Logging;
@@ -460,14 +458,6 @@ package body D_Bus.Messages is
    begin
       Log (Info, "Read message");
 
-      --  Note The array of UNIX file descriptors included with a Message
-      --  is passed alongside the first byte of the message header by the
-      --  reference D-Bus implementation. We must therefore copy this
-      --  implementation for compatibility purposes.
-
-      --  TODO is this good?
-      D_Bus.Streams.Read_FDs (Stream);
-
       --  Read raw header
       --  Note: Alignment reset before this!
       Raw_Message_Header'Read (Stream, RMH);
@@ -513,6 +503,16 @@ package body D_Bus.Messages is
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
       end case;
 
+      --  FDs are sent after signalling the number to be sent
+      if Item.Fields.Contains (F_Unix_Fds)
+        and then
+          Interfaces.Unsigned_32'
+            (+D_Bus.Types.Basic.Uint32 (Item.Fields (F_Unix_Fds).Get))
+          > 0
+      then
+         D_Bus.Streams.Read_FDs (Stream);
+      end if;
+
       --  Handle messages with no body
       if +RMH.Body_Length = 0 then
          return;
@@ -536,51 +536,33 @@ package body D_Bus.Messages is
          end loop;
       end;
 
-      --  Handle File Descriptors Recursively
-      Handle_FDs :
-      declare
-         procedure Check_FDs (Arg : in out D_Bus.Types.Root_Type'Class);
-         procedure Check_FDs (Arg : in out D_Bus.Types.Root_Type'Class)
-         is
-            use D_Bus.Types.Basic;
-            use D_Bus.Types.Containers;
-         begin
-            --  Don’t check anything unnecessary
-            if Ada.Strings.Fixed.Index (String (Arg.Signature), "h") = 0 then
-               return;
-            end if;
-
-            --  Redeem directly
-            if Arg in File_Descriptor'Class then
-               File_Descriptor'Class (Arg).Redeem (Stream);
-
-            --  Search struct
-            elsif Arg in Struct'Class then
-               for I in 1 .. Struct'Class (Arg).Count loop
-
-            --  Search array
-            elsif Arg in D_Bus.Types.Containers.D_Array'Class then
-               for E of Arg loop
-                  Check_FDs (E);
-               end loop;
-
-            --  Search dict
-            elsif Arg in D_Bus.Types.Containers.Dict'Class then
-               for I in Arg.Iterate loop
-                  Check_FDs (D_Bus.Types.Containers.Key (I));
-                  Check_FDs (D_Bus.Types.Containers.Element (I));
-               end loop;
-
-            --  Search variant
-            elsif Arg in D_Bus.Types.Containers.Variant'Class then
-               Check_FDs (D_Bus.Types.Containers.Variant'Class (Arg).Get);
-            end if;
-         end Check_FDs;
-      begin
-         for Arg of Item.Arguments loop
-            Check_FDs (Arg);
+      --  Retrieve all file descriptors from Stream
+      if D_Bus.Streams.FD_Count (Stream) > 0 then
+         for A of Item.Arguments loop
+            declare
+               procedure Fetch_Descriptor
+                 (X : in out D_Bus.Types.Root_Type'Class);
+               procedure Fetch_Descriptor
+                 (X : in out D_Bus.Types.Root_Type'Class)
+               is
+                  use D_Bus.Types;
+                  use D_Bus.Types.Basic;
+               begin
+                  if X in Container_Type'Class then
+                     For_Each
+                       (Container_Type'Class (X),
+                        Fetch_Descriptor'Unrestricted_Access);
+                  elsif X in File_Descriptor'Class then
+                     File_Descriptor'Class (X).Redeem (Stream);
+                  end if;
+               end Fetch_Descriptor;
+            begin
+               Fetch_Descriptor (A);
+            end;
          end loop;
-      end Handle_FDs;
+      end if;
+
+      --  Clear all FDs from Stream (they have been redeemed)
       D_Bus.Streams.Clear_FDs (Stream);
    end Read;
 
@@ -631,17 +613,39 @@ package body D_Bus.Messages is
          end;
       end loop;
 
+      --  Add all file descriptors to Stream
+      for A of Item.Arguments loop
+         declare
+            procedure Fetch_Index (X : in out D_Bus.Types.Root_Type'Class);
+            procedure Fetch_Index (X : in out D_Bus.Types.Root_Type'Class) is
+               use D_Bus.Types.Basic;
+               use D_Bus.Types;
+            begin
+               if X in Container_Type'Class then
+                  For_Each
+                    (Container_Type'Class (X),
+                     Fetch_Index'Unrestricted_Access);
+               elsif X in File_Descriptor'Class then
+                  File_Descriptor'Class (X).Store (Stream);
+               end if;
+            end Fetch_Index;
+         begin
+            Fetch_Index (A);
+         end;
+      end loop;
+
       --  Add calculated fields
       Add_Calculated_Fields : begin
          --  F_Signature (if there are arguments)
          if not Item.Arguments.Is_Empty then
             declare
                use D_Bus.Types.Containers;
+               use D_Bus.Types.Basic;
 
                S : Struct := Empty (Field_Struct_Contents);
             begin
                S.Set (1, +F_Signature);
-               S.Set (2, +(+D_Bus.Types.Signature (Item.Arguments)));
+               S.Set (2, +(+(D_Bus.Types.Signature (Item.Arguments))));
 
                RMH.Fields.Append (S);
             end;
@@ -651,35 +655,37 @@ package body D_Bus.Messages is
          if D_Bus.Streams.FD_Count (Stream) > 0 then
             declare
                use D_Bus.Types.Containers;
+               use D_Bus.Types.Basic;
 
                S : Struct := Empty (Field_Struct_Contents);
             begin
                S.Set (1, +F_Unix_Fds);
                S.Set
                  (2,
-                  +(D_Bus.Types.Basic.Uint32'
-                      (+D_Bus.Streams.FD_Count (Stream))));
+                  +(Uint32'
+                      (+Interfaces.Unsigned_32
+                          (D_Bus.Streams.FD_Count (Stream)))));
 
                RMH.Fields.Append (S);
             end;
          end if;
       end Add_Calculated_Fields;
 
-      --  Note The reference D-Bus implementation writes its array of UNIX
-      --  File Descriptors alongside the first byte of the message header.
-      --  We copy this implementation for the sake of compatibility, although
-      --  it has undesirably effects on code complexity.
-      --  TODO
-
       --  Write header
       --  Note: Alignment reset before this :)
       Raw_Message_Header'Write (Stream, RMH);
+
+      --  Send FDs
+      if D_Bus.Streams.FD_Count (Stream) > 0 then
+         D_Bus.Streams.Write_FDs (Stream);
+      end if;
 
       --  Write all elements
       for Element of Item.Arguments loop
          D_Bus.Types.Root_Type'Class'Write (Stream, Element);
       end loop;
 
+      --  Clear stored file descriptors
       D_Bus.Streams.Clear_FDs (Stream);
    end Write;
 end D_Bus.Messages;

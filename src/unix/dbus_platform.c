@@ -40,7 +40,7 @@ LOCAL bool is_running_c(pid_t handle) { return (bool)getpgid(handle) > 0; }
 enum result_t { DESTRUCTIVE, TRANSIENT, SUCCESS };
 
 LOCAL enum result_t read_fds_c(int socket, int *fds, int *fd_count, void *token,
-                      int token_length) {
+                               int token_length) {
 #ifdef SCM_RIGHTS
   struct iovec iov = {.iov_base = token, .iov_len = token_length};
   struct msghdr hdr = {0};
@@ -61,12 +61,15 @@ LOCAL enum result_t read_fds_c(int socket, int *fds, int *fd_count, void *token,
   if (recvmsg(socket, &hdr, 0) == -1)
     return TRANSIENT;
 
-  if ((chdr = CMSG_FIRSTHDR(&hdr)) == NULL)
+  if ((chdr = CMSG_FIRSTHDR(&hdr)) == NULL) {
+    printf("No first header");
     return DESTRUCTIVE;
+  }
 
   /*TODO check cmsg nxthdr for potential ddos attack and close fds */
   /* Fail if this is the wrong kind of aux message */
   if (chdr->cmsg_level != SOL_SOCKET || chdr->cmsg_type != SCM_RIGHTS) {
+    printf ("%d,%d",chdr->cmsg_level,chdr->cmsg_type);
     return DESTRUCTIVE;
   }
 

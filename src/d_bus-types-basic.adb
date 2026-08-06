@@ -20,28 +20,19 @@ package body D_Bus.Types.Basic is
    ----------------------
    -- File Descriptors --
    ----------------------
-   procedure Read
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out File_Descriptor)
-   is
-      Index : Interfaces.Unsigned_32 := 0;
+   procedure Redeem
+     (X : in out File_Descriptor;
+      S : not null access D_Bus.Streams.Possible_Alignable_Stream) is
    begin
-      raise Program_Error;
-      D_Bus.Streams.Read_Align (Stream, Item.Alignment);
-      Interfaces.Unsigned_32'Read (Stream, Index);
---      Item.FD := D_Bus.Streams.Retrieve_FD (Stream, Index);
-   end Read;
+      X := +D_Bus.Streams.Retrieve_FD (S, Natural (+X));
+   end Redeem;
 
-   procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : File_Descriptor)
-   is
-      Index : Interfaces.Unsigned_32 := 0;
+   procedure Store
+     (X : in out File_Descriptor;
+      S : not null access D_Bus.Streams.Possible_Alignable_Stream) is
    begin
-      raise Program_Error;
-      D_Bus.Streams.Write_Align (Stream, Item.Alignment);
---      Index := D_Bus.Streams.Store_FD (Stream, Item.FD);
-      Interfaces.Unsigned_32'Write (Stream, Index);
-   end Write;
+      X := +GNAT.OS_Lib.File_Descriptor (D_Bus.Streams.Store_FD (S, +X));
+   end Store;
+   --  Store a file descriptor in a Stream and store its index in the object
 
 end D_Bus.Types.Basic;

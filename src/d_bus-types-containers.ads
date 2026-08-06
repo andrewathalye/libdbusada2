@@ -117,6 +117,9 @@ package D_Bus.Types.Containers is
    --  Append `Element` to `Container`
    --  It must match the `Container`Ã¢ÂÂs signature
 
+   procedure Delete (Container : in out D_Array; Index : Positive);
+   --  Remove the element at index I
+
    overriding
    function Signature (X : D_Array) return Single_Signature;
    overriding
@@ -178,6 +181,9 @@ package D_Bus.Types.Containers is
    --  Insert <Key, Value> into `Container`
    --  Key must match `Container`Ã¢ÂÂs key type
    --  Value must match `Container`Ã¢ÂÂs element type
+
+   procedure Delete (Container : in out Dict; Key : Basic_Type'Class);
+   --  Delete the entry associated with <Key> from <Container>
 
    overriding
    function Signature (X : Dict) return Single_Signature;
@@ -366,9 +372,9 @@ private
    function Constructor
      (Signature : not null access Single_Signature) return Dict
    is (Dict'
-         (Key_Signature     => Signature.all (3),
+         (Key_Signature     => Signature.all (Signature.all'First + 2),
           Element_Signature =>
-            Intern (Signature.all (4 .. Signature.all'Last)),
+            Intern (Signature.all (Signature.all'First + 3 .. Signature.all'Last - 1)),
           others            => <>));
 
    procedure Read
@@ -402,7 +408,9 @@ private
    end record;
    for Variant'External_Tag use "D_Bus_Type_" & Variant_CC;
 
-   overriding function Alignment (X : Variant) return Padding_Alignment is (1);
+   overriding
+   function Alignment (X : Variant) return Padding_Alignment
+   is (1);
    --  v alignment for first byte in signature
 
    overriding

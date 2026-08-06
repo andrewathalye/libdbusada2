@@ -4,6 +4,8 @@ with GNAT.OS_Lib;
 with GNAT.Sockets;
 with GNATCOLL.OS.Process;
 
+with Interfaces;
+
 with D_Bus.Types;
 
 package D_Bus.Platform is
@@ -48,7 +50,7 @@ package D_Bus.Platform is
    File_Descriptor_Error             : exception;
    File_Descriptor_Destructive_Error : exception;
    type File_Descriptor_Array is
-     array (Positive range <>) of aliased GNAT.OS_Lib.File_Descriptor;
+     array (Natural range <>) of aliased GNAT.OS_Lib.File_Descriptor;
 
    function File_Descriptor_Passing_Support
      (S : GNAT.Sockets.Socket_Type) return Boolean;

@@ -157,12 +157,28 @@ package D_Bus.Types is
    function "=" (L, R : Root_Type'Class) return Boolean;
    --  This comparison operator is SLOW and should be avoided
 
+   --------------------------------
+   -- Basic Types and Containers --
+   --------------------------------
    type Basic_Type is interface and Root_Type;
 
    type Container_Type is interface and Root_Type;
    function Contents (X : Container_Type) return Contents_Signature
    is abstract;
    --  Signature of the contents of Container `X`
+
+
+   -------------------------------------
+   -- Iterating on Generic Containers --
+   -------------------------------------
+   type Apply_Procedure is access procedure (X : in out Root_Type'Class);
+   procedure For_Each
+     (X : in out Container_Type'Class; Apply : Apply_Procedure);
+   --  Apply the procedure 'Apply' to every object in the container
+   --  This raises Unsupported_Container if the object in question
+   --  does not descend from Struct, Array, Dict, or Variant.
+
+   Unsupported_Container : exception;
 
    -----------------------------
    -- Dispatching Constructor --
@@ -186,8 +202,6 @@ package D_Bus.Types is
    function Size (X : Argument_List) return Ada.Streams.Stream_Element_Count;
    --  Size in bytes of the arguments if serialised. This includes all
    --  INTERNAL padding.
-
-
 private
    -------------------------
    -- Constant Completion --

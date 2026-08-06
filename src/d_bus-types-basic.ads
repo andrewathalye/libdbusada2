@@ -58,18 +58,29 @@ package D_Bus.Types.Basic is
    type Double is new Doubles.Outer with null record;
    for Double'External_Tag use "D_Bus_Type_" & Double_CC;
 
-   type File_Descriptor is new Basic_Type with private;
+   ----------------------
+   -- File Descriptors --
+   ----------------------
+   package File_Descriptors is new
+     Discrete_Wrappers (File_Descriptor_CC, GNAT.OS_Lib.File_Descriptor);
+   type File_Descriptor is new File_Descriptors.Outer with null record;
    for File_Descriptor'External_Tag use "D_Bus_Type_" & File_Descriptor_CC;
-   --  Note: Writing this type to a Stream attempts to add the specified
-   --  FD to the Stream’s FD queue. When a message is ready to be sent,
-   --  all FDs in the queue will be dumped.
+   --  Note: This only reads the _Index_ of a file descriptor from the D-Bus
+   --  stream.
    --
-   --  Reading an FD from a Stream causes the procedure to request a file
-   --  descriptor based upon the internal index of the FD. If the Stream was
-   --  not filled with FDs by Messages.Receive, this will fail.
-   function "+" (Item : File_Descriptor) return GNAT.OS_Lib.File_Descriptor;
-   function "+" (Item : GNAT.OS_Lib.File_Descriptor) return File_Descriptor;
-   function Image (Item : File_Descriptor) return String;
+   --  To obtain the actual file descriptor, call Store or Redeem
+   function "+" (X : GNAT.OS_Lib.File_Descriptor) return File_Descriptor
+   is (File_Descriptors."+" (X) with null record);
+
+   procedure Redeem
+     (X : in out File_Descriptor;
+      S : not null access D_Bus.Streams.Possible_Alignable_Stream);
+   --  Fetch a real file descriptor from the Stream by its Index
+
+   procedure Store
+     (X : in out File_Descriptor;
+      S : not null access D_Bus.Streams.Possible_Alignable_Stream);
+   --  Store a file descriptor in a Stream and store its index in the object
 
    ------------------
    -- String Types --
@@ -120,50 +131,4 @@ package D_Bus.Types.Basic is
 
    function "+" (X : Contents_Signature) return D_Signature
    is (Signatures."+" (X) with null record);
-private
-   use type Ada.Streams.Stream_Element_Count;
-
-   type File_Descriptor is new Basic_Type with record
-      FD : GNAT.OS_Lib.File_Descriptor;
-   end record;
-
-   overriding
-   function Alignment (X : File_Descriptor) return Padding_Alignment
-   is (4);
-   --  Assumes Uint32 per spec
-
-   overriding
-   function Signature (X : File_Descriptor) return Single_Signature
-   is (Single_Signature'(1 => File_Descriptor_CC));
-
-   overriding
-   function Size
-     (X : File_Descriptor; Count : Ada.Streams.Stream_Element_Count)
-      return Ada.Streams.Stream_Element_Count
-   is (X.FD'Size / 8 + D_Bus.Streams.Alignment_Bytes (Count, X.Alignment));
-
-   overriding
-   function Constructor
-     (Signature : not null access Single_Signature) return File_Descriptor
-   is (others => <>);
-
-
-   procedure Read
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : out File_Descriptor);
-   for File_Descriptor'Read use Read;
-
-   procedure Write
-     (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
-      Item   : File_Descriptor);
-   for File_Descriptor'Write use Write;
-
-   function "+" (Item : File_Descriptor) return GNAT.OS_Lib.File_Descriptor
-   is (Item.FD);
-
-   function "+" (Item : GNAT.OS_Lib.File_Descriptor) return File_Descriptor
-   is (FD => Item);
-
-   function Image (Item : File_Descriptor) return String
-   is (Item.FD'Image);
 end D_Bus.Types.Basic;

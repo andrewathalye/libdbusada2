@@ -2,7 +2,6 @@ pragma Ada_2012;
 
 with Ada.Streams;
 with GNAT.OS_Lib;
-with Interfaces;
 
 package D_Bus.Streams is
    pragma Assertion_Policy (Dynamic_Predicate => Check);
@@ -54,10 +53,10 @@ package D_Bus.Streams is
    ------------------------
    function Retrieve_FD
      (Stream : not null access Possible_Alignable_Stream;
-      Index  : Interfaces.Unsigned_32) return GNAT.OS_Lib.File_Descriptor;
+      Index  : Natural) return GNAT.OS_Lib.File_Descriptor;
    function Retrieve_FD
      (Stream : not null access Alignable_Stream;
-      Index  : Interfaces.Unsigned_32) return GNAT.OS_Lib.File_Descriptor is abstract;
+      Index  : Natural) return GNAT.OS_Lib.File_Descriptor is abstract;
 
    --  Retrieve a FD previously stored in the Stream object
    --  Raise FD_Slot_Empty if there is no FD with that index
@@ -66,10 +65,10 @@ package D_Bus.Streams is
 
    function Store_FD
      (Stream : not null access Possible_Alignable_Stream;
-      FD     : GNAT.OS_Lib.File_Descriptor) return Interfaces.Unsigned_32;
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural;
    function Store_FD
      (Stream : not null access Alignable_Stream;
-      FD     : GNAT.OS_Lib.File_Descriptor) return Interfaces.Unsigned_32 is abstract;
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural is abstract;
    --  Store a FD in the Stream object
    --  This returns the index in the FD queue that it is stored at
 
@@ -87,9 +86,9 @@ package D_Bus.Streams is
 
    function FD_Count
      (Stream : not null access Possible_Alignable_Stream)
-      return Interfaces.Unsigned_32;
+      return Natural;
    function FD_Count
      (Stream : not null access Alignable_Stream)
-      return Interfaces.Unsigned_32 is abstract;
+      return Natural is abstract;
    --  Return the number of FDs stored in the stream
 end D_Bus.Streams;

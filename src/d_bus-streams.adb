@@ -40,7 +40,7 @@ package body D_Bus.Streams is
    ----------------------
    function Retrieve_FD
      (Stream : not null access Possible_Alignable_Stream;
-      Index  : Interfaces.Unsigned_32) return GNAT.OS_Lib.File_Descriptor
+      Index  : Natural) return GNAT.OS_Lib.File_Descriptor
    is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.Retrieve_FD (Index);
@@ -48,7 +48,7 @@ package body D_Bus.Streams is
 
    function Store_FD
      (Stream : not null access Possible_Alignable_Stream;
-      FD     : GNAT.OS_Lib.File_Descriptor) return Interfaces.Unsigned_32
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural
    is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.Store_FD (FD);
@@ -74,7 +74,7 @@ package body D_Bus.Streams is
 
    function FD_Count
      (Stream : not null access Possible_Alignable_Stream)
-      return Interfaces.Unsigned_32
+      return Natural
    is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.FD_Count;

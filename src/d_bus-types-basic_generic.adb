@@ -63,7 +63,6 @@ package body D_Bus.Types.Basic_Generic is
         (X : Outer; Count : Ada.Streams.Stream_Element_Count)
          return Ada.Streams.Stream_Element_Count
       is
-         use type Ada.Streams.Stream_Element_Offset;
       begin
          return
            D_Bus.Streams.Alignment_Bytes (Count, Data_Length_Type'Size / 8) +
@@ -77,7 +76,6 @@ package body D_Bus.Types.Basic_Generic is
         (Stream :     not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : out Outer)
       is
-         use type Ada.Streams.Stream_Element_Offset;
       begin
          D_Bus.Streams.Read_Align (Stream, Data_Length_Type'Size / 8);
          Item.I.Replace_Element (Internal_Type'Input (Stream));
@@ -90,7 +88,6 @@ package body D_Bus.Types.Basic_Generic is
         (Stream : not null access Ada.Streams.Root_Stream_Type'Class;
          Item   : Outer)
       is
-         use type Ada.Streams.Stream_Element_Offset;
       begin
          D_Bus.Streams.Write_Align (Stream, Data_Length_Type'Size / 8);
          Internal_Type'Output (Stream, Item.I.Element);

@@ -30,12 +30,13 @@ package D_Bus.Connection is
    function Is_Connected (C : Connection) return Boolean;
    --  Returns whether `C` refers to an active D-Bus connection.
 
-   subtype Connected_Connection is Connection with
-       Dynamic_Predicate => Is_Connected (Connected_Connection);
+   subtype Connected_Connection is Connection
+   with Dynamic_Predicate => Is_Connected (Connected_Connection);
 
-   procedure Move (Input : in out Connection; Output : out Connection) with
+   procedure Move (Input : in out Connection; Output : out Connection)
+   with
      Pre =>
-      Input in Connected_Connection and Output not in Connected_Connection;
+       Input in Connected_Connection and Output not in Connected_Connection;
    --  Copy all data from `Input` into `Output` and clear `Input.
    --
    --  `Input` must be a `Connected_Connection`
@@ -44,16 +45,14 @@ package D_Bus.Connection is
    ---------------------
    -- Message Support --
    ---------------------
-   procedure Send
-     (C : aliased Connection; M : in out D_Bus.Messages.Message) with
-     Pre => C in Connected_Connection;
+   procedure Send (C : aliased Connection; M : in out D_Bus.Messages.Message)
+   with Pre => C in Connected_Connection;
    --  Send a message via connection `C`
    --  The same message object may be sent multiple times, in which case
    --  it will receive a new serial number each time it is sent.
 
-   procedure Receive
-     (C : aliased Connection; M : out D_Bus.Messages.Message) with
-     Pre => Is_Connected (C);
+   procedure Receive (C : aliased Connection; M : out D_Bus.Messages.Message)
+   with Pre => Is_Connected (C);
    --  Receive a message from connection `C`
 
    function Can_Read
@@ -129,33 +128,63 @@ private
    -------------------
    --  Stream Impl  --
    -------------------
-   package FD_Vectors is new Ada.Containers.Vectors (Natural, GNAT.OS_Lib.File_Descriptor);
+   use type GNAT.OS_Lib.File_Descriptor;
+   package FD_Vectors is new
+     Ada.Containers.Vectors
+       (Natural,
+        GNAT.OS_Lib.File_Descriptor);
    subtype FD_Vector is FD_Vectors.Vector;
 
-   type Canonical_Alignable_Stream is
-   new D_Bus.Streams.Alignable_Stream with record
+   type Canonical_Alignable_Stream is new D_Bus.Streams.Alignable_Stream
+   with record
       Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
       FDs         : FD_Vector;
    end record;
 
-   overriding procedure Read_Align
+   overriding
+   procedure Read_Align
      (Stream    : not null access Canonical_Alignable_Stream;
       Alignment : D_Bus.Streams.Alignment_Type);
 
-   overriding procedure Write_Align
+   overriding
+   procedure Write_Align
      (Stream    : not null access Canonical_Alignable_Stream;
       Alignment : D_Bus.Streams.Alignment_Type);
 
-   overriding procedure Read
+   overriding
+   procedure Read
      (Stream : in out Canonical_Alignable_Stream;
-      Item   :    out Ada.Streams.Stream_Element_Array;
-      Last   :    out Ada.Streams.Stream_Element_Offset);
+      Item   : out Ada.Streams.Stream_Element_Array;
+      Last   : out Ada.Streams.Stream_Element_Offset);
 
-   overriding procedure Write
+   overriding
+   procedure Write
      (Stream : in out Canonical_Alignable_Stream;
-      Item   :        Ada.Streams.Stream_Element_Array);
+      Item   : Ada.Streams.Stream_Element_Array);
+
+   overriding
+   function Retrieve_FD
+     (Stream : not null access Canonical_Alignable_Stream;
+      Index  : Natural) return GNAT.OS_Lib.File_Descriptor;
+
+   overriding
+   function Store_FD
+     (Stream : not null access Canonical_Alignable_Stream;
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural;
+
+   overriding
+   procedure Clear_FDs (Stream : not null access Canonical_Alignable_Stream);
+   overriding
+   procedure Read_FDs (Stream : not null access Canonical_Alignable_Stream);
+   overriding
+   procedure Write_FDs (Stream : not null access Canonical_Alignable_Stream);
+
+   overriding
+   function FD_Count
+     (Stream : not null access Canonical_Alignable_Stream)
+      return Natural;
 
    ------------------------
    --  Connection Itself --
@@ -163,7 +192,7 @@ private
    type Connection is record
       Socket          : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
       UUID            : D_Bus.Types.UUID := (others => Character'First);
-      Unix_Fd_Support : Boolean                  := False;
+      Unix_Fd_Support : Boolean := False;
    end record;
 
    type Mode_Type is (Connect, Listen);
