@@ -72,17 +72,12 @@ package D_Bus.Streams is
    --  Store a FD in the Stream object
    --  This returns the index in the FD queue that it is stored at
 
+   --  Note: If the Stream supports FDs, then reading and writing
+   --  will automatically emit and queued file descriptors.
+
    procedure Clear_FDs (Stream : not null access Possible_Alignable_Stream);
    procedure Clear_FDs (Stream : not null access Alignable_Stream) is abstract;
    --  Clear any FDs stored in the Stream
-
-   procedure Read_FDs (Stream : not null access Possible_Alignable_Stream);
-   procedure Read_FDs (Stream : not null access Alignable_Stream) is abstract;
-   --  Call into platform-specific code and read FDs from a Stream
-
-   procedure Write_FDs (Stream : not null access Possible_Alignable_Stream);
-   procedure Write_FDs (Stream : not null access Alignable_Stream) is abstract;
-   --  Call into platform-specific code and write FDs to a Stream
 
    function FD_Count
      (Stream : not null access Possible_Alignable_Stream)

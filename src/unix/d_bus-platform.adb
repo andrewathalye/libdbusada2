@@ -6,7 +6,7 @@ with Ada.Text_IO;
 with Interfaces.C.Strings;
 
 with D_Bus.Encodings;
-with D_Bus.Logging; use D_Bus.Logging;
+with System;
 
 package body D_Bus.Platform is
    ----------------
@@ -43,8 +43,8 @@ package body D_Bus.Platform is
    -- USERS --
    -----------
    function Get_User_ID return String is
-      function Get_User_ID_C return Interfaces.C.Strings.chars_ptr with
-        Import => True, Convention => C;
+      function Get_User_ID_C return Interfaces.C.Strings.chars_ptr
+      with Import => True, Convention => C;
       Ptr : Interfaces.C.Strings.chars_ptr;
    begin
       Ptr := Get_User_ID_C;
@@ -62,8 +62,8 @@ package body D_Bus.Platform is
    is
       function Is_Running_C
         (Handle : GNATCOLL.OS.Process.Process_Handle)
-         return Interfaces.C.C_bool with
-        Import => True, Convention => C;
+         return Interfaces.C.C_bool
+      with Import => True, Convention => C;
    begin
       return Boolean (Is_Running_C (Handle));
    end Is_Running;
@@ -71,8 +71,13 @@ package body D_Bus.Platform is
    ----------------------
    -- FILE DESCRIPTORS --
    ----------------------
-   Max_Possible_FDs : Integer with
-     Import => True, Convention => C;
+   Max_Possible_FDs : Integer
+   with Import => True, Convention => C;
+
+   type FD_Array is
+     array (Natural range 0 .. Max_Possible_FDs)
+     of GNAT.OS_Lib.File_Descriptor;
+   Buf : FD_Array;
 
    function File_Descriptor_Passing_Support
      (S : GNAT.Sockets.Socket_Type) return Boolean
@@ -83,71 +88,54 @@ package body D_Bus.Platform is
         GNAT.Sockets.Get_Socket_Name (S).Family = GNAT.Sockets.Family_Unix;
    end File_Descriptor_Passing_Support;
 
-   package body File_Descriptor_Passing is
-      function Read_FDs
-        (Socket : GNAT.Sockets.Socket_Type; Token : out Token_Type)
-         return File_Descriptor_Array
-      is
-         type Result_Type is (Destructive, Transient, Success) with
-           Convention => C;
+   procedure Receive_Data_With_FDs
+     (Socket : GNAT.Sockets.Socket_Type;
+      Item   : out Ada.Streams.Stream_Element_Array;
+      Last   : out Ada.Streams.Stream_Element_Offset;
+      FDs    : in out FD_Vector)
+   is
+      use type Interfaces.C.C_bool;
 
-         Buf      : aliased File_Descriptor_Array (1 .. Max_Possible_FDs);
-         FD_Count : Integer;
+      function Receive_Data_With_FDs_C
+        (Socket      : GNAT.Sockets.Socket_Type;
+         Item        : System.Address;
+         Item_Length : Ada.Streams.Stream_Element_Count;
+         Last        : out Ada.Streams.Stream_Element_Offset;
+         FDs         : System.Address;
+         FD_Count    : out Integer) return Interfaces.C.C_bool
+      with Convention => C, Import => True;
 
-         function Read_FDs_C
-           (Socket       : Integer; FDs : access GNAT.OS_Lib.File_Descriptor;
-            FD_Count     : out Integer; Token : out Token_Type;
-            Token_Length :     Integer) return Result_Type with
-           Import => True, Convention => C;
-      begin
-         Log (Info, "Read FDs");
+      FD_Count : Natural;
+   begin
+      if not Receive_Data_With_FDs_C
+               (Socket,
+                Item (Item'First)'Address,
+                Item'Length,
+                Last,
+                Buf (Buf'First)'Address,
+                FD_Count)
+      then
+         raise File_Descriptor_Error;
+      end if;
 
-         --  TODO what happens if fds length is zero?
-         case Read_FDs_C
-           (Socket => GNAT.Sockets.To_C (Socket),
-            FDs    => Buf (Buf'First)'Access, FD_Count => FD_Count,
-            Token  => Token, Token_Length => Token'Size / 8)
-         is
-            when Destructive =>
-               raise File_Descriptor_Destructive_Error;
-            when Transient =>
-               raise File_Descriptor_Error;
-            when Success =>
-               return Buf (1 .. FD_Count);
-         end case;
-      end Read_FDs;
+      for I in Buf'First .. FD_Count - 1 loop
+         FDs.Append (Buf (I));
+      end loop;
+   end Receive_Data_With_FDs;
+   --  Read data from a socket and attempt to retrieve FDs transferred on it.
+   --  Raise File_Descriptor_Error if file descriptors may have been lost
 
-      procedure Write_FDs
-        (Socket : GNAT.Sockets.Socket_Type; FDs : File_Descriptor_Array;
-         Token  : Token_Type)
-      is
-         use type Interfaces.C.C_bool;
-
-         function Write_FDs_C
-           (Socket       : Integer;
-            FDs          : access constant GNAT.OS_Lib.File_Descriptor;
-            FD_Count     : Integer; Token : access constant Token_Type;
-            Token_Length : Integer) return Interfaces.C.C_bool with
-           Import => True, Convention => C;
-
-         Aliased_Token : aliased constant Token_Type := Token;
-      begin
-         Log (Info, "Write FDs");
-
-         if FDs'Length = 0 then
-            Log (Error, "No FDs to write");
-            return;
-         end if;
-
-         if not Write_FDs_C
-             (Socket => GNAT.Sockets.To_C (Socket),
-              FDs    => FDs (FDs'First)'Access, FD_Count => FDs'Length,
-              Token  => Aliased_Token'Access, Token_Length => Token'Size / 8)
-         then
-            raise File_Descriptor_Error;
-         end if;
-      end Write_FDs;
-   end File_Descriptor_Passing;
+   procedure Send_Data_With_FDs
+     (Socket : GNAT.Sockets.Socket_Type;
+      Item   : Ada.Streams.Stream_Element_Array;
+      FDs    : FD_Vector)
+   is
+      Last : Ada.Streams.Stream_Element_Offset;
+   begin
+      GNAT.Sockets.Send_Socket (Socket, Item, Last);
+   end Send_Data_With_FDs;
+   --  Write data to a socket and attempt to send FDs over it
+   --  Raise File_Descriptor_Error if no file descriptors could be sent
 
    -----------------
    -- CREDENTIALS --
@@ -156,8 +144,8 @@ package body D_Bus.Platform is
       use type Interfaces.C.Strings.chars_ptr;
 
       function Read_Credentials_C
-        (S : Integer) return Interfaces.C.Strings.chars_ptr with
-        Import => True, Convention => C;
+        (S : Integer) return Interfaces.C.Strings.chars_ptr
+      with Import => True, Convention => C;
 
       Ptr : Interfaces.C.Strings.chars_ptr;
    begin
@@ -175,9 +163,8 @@ package body D_Bus.Platform is
    procedure Write_Credentials (S : GNAT.Sockets.Socket_Type) is
       use type Interfaces.C.C_bool;
 
-      function Write_Credentials_C
-        (S : Integer) return Interfaces.C.C_bool with
-        Import => True, Convention => C;
+      function Write_Credentials_C (S : Integer) return Interfaces.C.C_bool
+      with Import => True, Convention => C;
    begin
       if not Write_Credentials_C (GNAT.Sockets.To_C (S)) then
          raise Credentials_Error;

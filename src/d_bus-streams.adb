@@ -4,16 +4,14 @@ package body D_Bus.Streams is
    ---------------
    procedure Read_Align
      (Stream    : not null access Possible_Alignable_Stream;
-      Alignment : Alignment_Type)
-   is
+      Alignment : Alignment_Type) is
    begin
       Alignable_Stream'Class (Stream.all)'Access.Read_Align (Alignment);
    end Read_Align;
 
    procedure Write_Align
      (Stream    : not null access Possible_Alignable_Stream;
-      Alignment : Alignment_Type)
-   is
+      Alignment : Alignment_Type) is
    begin
       Alignable_Stream'Class (Stream.all)'Access.Write_Align (Alignment);
    end Write_Align;
@@ -23,7 +21,6 @@ package body D_Bus.Streams is
       return Ada.Streams.Stream_Element_Count
    is
       use type Ada.Streams.Stream_Element_Count;
-
       Discrepancy : Ada.Streams.Stream_Element_Offset;
    begin
       Discrepancy := Alignment - (Count mod Alignment);
@@ -39,43 +36,26 @@ package body D_Bus.Streams is
    -- File Descriptors --
    ----------------------
    function Retrieve_FD
-     (Stream : not null access Possible_Alignable_Stream;
-      Index  : Natural) return GNAT.OS_Lib.File_Descriptor
-   is
+     (Stream : not null access Possible_Alignable_Stream; Index : Natural)
+      return GNAT.OS_Lib.File_Descriptor is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.Retrieve_FD (Index);
    end Retrieve_FD;
 
    function Store_FD
      (Stream : not null access Possible_Alignable_Stream;
-      FD     : GNAT.OS_Lib.File_Descriptor) return Natural
-   is
+      FD     : GNAT.OS_Lib.File_Descriptor) return Natural is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.Store_FD (FD);
    end Store_FD;
 
-   procedure Clear_FDs (Stream : not null access Possible_Alignable_Stream)
-   is
+   procedure Clear_FDs (Stream : not null access Possible_Alignable_Stream) is
    begin
       Alignable_Stream'Class (Stream.all)'Access.Clear_FDs;
    end Clear_FDs;
 
-   procedure Read_FDs (Stream : not null access Possible_Alignable_Stream)
-   is
-   begin
-      Alignable_Stream'Class (Stream.all)'Access.Read_FDs;
-   end Read_FDs;
-
-   procedure Write_FDs (Stream : not null access Possible_Alignable_Stream)
-   is
-   begin
-      Alignable_Stream'Class (Stream.all)'Access.Write_FDs;
-   end Write_FDs;
-
    function FD_Count
-     (Stream : not null access Possible_Alignable_Stream)
-      return Natural
-   is
+     (Stream : not null access Possible_Alignable_Stream) return Natural is
    begin
       return Alignable_Stream'Class (Stream.all)'Access.FD_Count;
    end FD_Count;

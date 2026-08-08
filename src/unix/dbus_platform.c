@@ -37,15 +37,14 @@ LOCAL const int max_possible_fds = 0;
 
 LOCAL bool is_running_c(pid_t handle) { return (bool)getpgid(handle) > 0; }
 
-enum result_t { DESTRUCTIVE, TRANSIENT, SUCCESS };
-
-LOCAL enum result_t read_fds_c(int socket, int *fds, int *fd_count, void *token,
-                               int token_length) {
+LOCAL bool receive_data_with_fds_c(int socket, void *item,
+                                   long long int item_length,
+                                   long long int *last, int *fds,
+                                   int *fd_count) {
 #ifdef SCM_RIGHTS
-  struct iovec iov = {.iov_base = token, .iov_len = token_length};
+  struct iovec iov = {.iov_base = item, .iov_len = item_length};
   struct msghdr hdr = {0};
   struct cmsghdr *chdr;
-  int i = 0;
 
   /* Control message buffer */
   char buf[CMSG_SPACE(max_possible_fds * sizeof(int))];
@@ -58,36 +57,41 @@ LOCAL enum result_t read_fds_c(int socket, int *fds, int *fd_count, void *token,
   hdr.msg_controllen = sizeof(buf);
 
   /* Try to receive a message */
-  if (recvmsg(socket, &hdr, 0) == -1)
-    return TRANSIENT;
+  if ((*last = recvmsg(socket, &hdr, 0)) == -1)
+    return false;
 
-  if ((chdr = CMSG_FIRSTHDR(&hdr)) == NULL) {
-    printf("No first header");
-    return DESTRUCTIVE;
-  }
-
-  /*TODO check cmsg nxthdr for potential ddos attack and close fds */
-  /* Fail if this is the wrong kind of aux message */
-  if (chdr->cmsg_level != SOL_SOCKET || chdr->cmsg_type != SCM_RIGHTS) {
-    printf ("%d,%d",chdr->cmsg_level,chdr->cmsg_type);
-    return DESTRUCTIVE;
-  }
-
-  /* Calculate number of fds passed */
+  int i;
   *fd_count = 0;
-  while (CMSG_LEN((i + 1) * sizeof(int)) <= chdr->cmsg_len)
-    i++;
+  chdr = CMSG_FIRSTHDR(&hdr);
+  if (chdr != NULL) {
+    /* Skip if it is the wrong kind of aux message */
+    if (chdr->cmsg_level != SOL_SOCKET || chdr->cmsg_type != SCM_RIGHTS) {
+      goto check_next;
+    }
 
-  /* Copy data */
-  for (int j = 0; j < i; j++)
-    fds[j] = ((int *)CMSG_DATA(chdr))[j];
+    printf ("FDs Found\n");
 
-  *fd_count = i;
+    i = 0;
+    /* Calculate number of fds passed */
+    while (CMSG_LEN((i + 1) * sizeof(int)) <= chdr->cmsg_len)
+      i++;
 
-  return SUCCESS;
+   /* Copy data */
+   for (int j = 0; j < i; j++)
+      fds[*fd_count + j] = ((int *)CMSG_DATA(chdr))[j];
+
+   *fd_count += i;
+
+   printf ("Done reading and counting FDs: %d", i);
+
+  check_next:
+    chdr = CMSG_NXTHDR(&hdr, chdr);
+  }
+
+  return true;
 
 #else
-  return TRANSIENT;
+  return false;
 #endif
 }
 

@@ -287,7 +287,7 @@ private
    No_Index : constant Array_Cursor := (null, 0);
 
    package Vectors is new
-     Ada.Containers.Indefinite_Vectors (Natural, Root_Type'Class);
+     Ada.Containers.Indefinite_Vectors (Positive, Root_Type'Class);
 
    type D_Array (Element_Signature : Interned_Single_Signature) is
      new Container_Type
@@ -374,7 +374,9 @@ private
    is (Dict'
          (Key_Signature     => Signature.all (Signature.all'First + 2),
           Element_Signature =>
-            Intern (Signature.all (Signature.all'First + 3 .. Signature.all'Last - 1)),
+            Intern
+              (Signature.all
+                 (Signature.all'First + 3 .. Signature.all'Last - 1)),
           others            => <>));
 
    procedure Read

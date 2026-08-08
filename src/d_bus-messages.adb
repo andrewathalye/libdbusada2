@@ -503,16 +503,6 @@ package body D_Bus.Messages is
             Assert_Or_Protocol_Error (Item.Fields.Contains (F_Member));
       end case;
 
-      --  FDs are sent after signalling the number to be sent
-      if Item.Fields.Contains (F_Unix_Fds)
-        and then
-          Interfaces.Unsigned_32'
-            (+D_Bus.Types.Basic.Uint32 (Item.Fields (F_Unix_Fds).Get))
-          > 0
-      then
-         D_Bus.Streams.Read_FDs (Stream);
-      end if;
-
       --  Handle messages with no body
       if +RMH.Body_Length = 0 then
          return;
@@ -537,6 +527,7 @@ package body D_Bus.Messages is
       end;
 
       --  Retrieve all file descriptors from Stream
+      --  These were read automatically alongside Stream data
       if D_Bus.Streams.FD_Count (Stream) > 0 then
          for A of Item.Arguments loop
             declare
@@ -614,6 +605,7 @@ package body D_Bus.Messages is
       end loop;
 
       --  Add all file descriptors to Stream
+      --  These will be written automatically alongside Stream data
       for A of Item.Arguments loop
          declare
             procedure Fetch_Index (X : in out D_Bus.Types.Root_Type'Class);
@@ -674,11 +666,6 @@ package body D_Bus.Messages is
       --  Write header
       --  Note: Alignment reset before this :)
       Raw_Message_Header'Write (Stream, RMH);
-
-      --  Send FDs
-      if D_Bus.Streams.FD_Count (Stream) > 0 then
-         D_Bus.Streams.Write_FDs (Stream);
-      end if;
 
       --  Write all elements
       for Element of Item.Arguments loop

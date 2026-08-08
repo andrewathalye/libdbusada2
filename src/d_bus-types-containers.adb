@@ -1,6 +1,7 @@
 pragma Ada_2012;
 
 with Ada.Strings.Hash;
+with D_Bus.Logging;
 with GNATCOLL.Strings;
 
 with D_Bus.Types.Basic;
@@ -261,6 +262,15 @@ package body D_Bus.Types.Containers is
       Accumulator := Alignment_Bytes (Count, Data_Length_Type'Size / 8);
       Accumulator := Accumulator + Data_Length_Type'Size / 8;
 
+      --  Empty array has padding for a single element
+      if X.Inner.Is_Empty then
+         return
+           Accumulator
+           + Alignment_Bytes
+               (Count + Accumulator,
+                Dispatching_Construct (X.Element_Signature.all).Alignment);
+      end if;
+
       for Element of X.Inner loop
          Accumulator := Accumulator + Element.Size (Accumulator + Count);
       end loop;
@@ -512,6 +522,11 @@ package body D_Bus.Types.Containers is
       --  Data length pre-padding and data length
       Accumulator := Alignment_Bytes (Count, Data_Length_Type'Size / 8);
       Accumulator := Accumulator + Data_Length_Type'Size / 8;
+
+      --  Empty dict has padding for a single dict element
+      if X.Inner.Is_Empty then
+         return Accumulator + Alignment_Bytes (Count + Accumulator, 8);
+      end if;
 
       for C in X.Inner.Iterate loop
          --  8-byte alignment for dict_entry type

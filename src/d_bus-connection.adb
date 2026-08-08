@@ -4,11 +4,8 @@ with Ada.IO_Exceptions;
 with Ada.Real_Time;
 with Ada.Numerics.Discrete_Random;
 
-with Interfaces;
-
 with D_Bus.Connection.Parse_Address;
 with D_Bus.Connection.Try_Authenticate;
-with D_Bus.Platform;
 with D_Bus.Logging; use D_Bus.Logging;
 
 package body D_Bus.Connection is
@@ -65,8 +62,16 @@ package body D_Bus.Connection is
    is
       use type Ada.Streams.Stream_Element_Offset;
    begin
-      GNAT.Sockets.Receive_Socket
-        (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
+      if Stream.Connection.Unix_Fd_Support then
+         D_Bus.Platform.Receive_Data_With_FDs
+           (Stream.Connection.Socket,
+            Item => Item,
+            Last => Last,
+            FDs  => Stream.FDs);
+      else
+         GNAT.Sockets.Receive_Socket
+           (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
+      end if;
 
       Stream.Read_Count := Stream.Read_Count + Last;
    end Read;
@@ -80,8 +85,19 @@ package body D_Bus.Connection is
 
       Last : Ada.Streams.Stream_Element_Offset;
    begin
-      GNAT.Sockets.Send_Socket
-        (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
+      if not Stream.FDs.Is_Empty then
+         if not Stream.Connection.Unix_Fd_Support then
+            raise Program_Error
+              with "TODO: No FD support but asked to send them";
+         end if;
+
+         D_Bus.Platform.Send_Data_With_FDs
+           (Stream.Connection.Socket, Item => Item, FDs => Stream.FDs);
+         Stream.Clear_FDs;
+      else
+         GNAT.Sockets.Send_Socket
+           (Socket => Stream.Connection.Socket, Item => Item, Last => Last);
+      end if;
 
       Stream.Write_Count := Stream.Write_Count + Last;
 
@@ -96,8 +112,7 @@ package body D_Bus.Connection is
    overriding
    function Retrieve_FD
      (Stream : not null access Canonical_Alignable_Stream; Index : Natural)
-      return GNAT.OS_Lib.File_Descriptor
-   is
+      return GNAT.OS_Lib.File_Descriptor is
    begin
       if Natural (Stream.FDs.Length) >= Index then
          return Stream.FDs (Index);
@@ -122,34 +137,6 @@ package body D_Bus.Connection is
    begin
       Stream.FDs.Clear;
    end Clear_FDs;
-
-   package Byte_FDs is new
-     D_Bus.Platform.File_Descriptor_Passing (Interfaces.Unsigned_8);
-
-   overriding
-   procedure Read_FDs (Stream : not null access Canonical_Alignable_Stream) is
-      Token    : Interfaces.Unsigned_8;
-      FD_Array : constant D_Bus.Platform.File_Descriptor_Array :=
-        Byte_FDs.Read_FDs (Stream.Connection.Socket, Token);
-   begin
-      for FD of FD_Array loop
-         Stream.FDs.Append (FD);
-      end loop;
-   end Read_FDs;
-
-   overriding
-   procedure Write_FDs (Stream : not null access Canonical_Alignable_Stream) is
-      Token    : constant Interfaces.Unsigned_8 := 0;
-      FD_Array :
-        D_Bus.Platform.File_Descriptor_Array
-          (1 .. Natural (Stream.FDs.Length));
-   begin
-      for I in 1 .. FD_Array'Last loop
-         FD_Array (I) := Stream.FDs (I);
-      end loop;
-
-      Byte_FDs.Write_FDs (Stream.Connection.Socket, FD_Array, Token);
-   end Write_FDs;
 
    overriding
    function FD_Count

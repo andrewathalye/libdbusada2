@@ -1,5 +1,7 @@
 pragma Ada_2012;
 
+with Ada.Containers.Vectors;
+with Ada.Streams;
 with GNAT.OS_Lib;
 with GNAT.Sockets;
 with GNATCOLL.OS.Process;
@@ -47,46 +49,31 @@ package D_Bus.Platform is
    ----------------------
    -- FILE DESCRIPTORS --
    ----------------------
-   File_Descriptor_Error             : exception;
-   File_Descriptor_Destructive_Error : exception;
-   type File_Descriptor_Array is
-     array (Natural range <>) of aliased GNAT.OS_Lib.File_Descriptor;
+   File_Descriptor_Error : exception;
+   use type GNAT.OS_Lib.File_Descriptor;
+   package FD_Vectors is new
+     Ada.Containers.Vectors (Natural, GNAT.OS_Lib.File_Descriptor);
+   subtype FD_Vector is FD_Vectors.Vector;
 
    function File_Descriptor_Passing_Support
      (S : GNAT.Sockets.Socket_Type) return Boolean;
    --  Returns whether socket `S` supports transferring file descriptors
    --  on the current platform.
-   generic
-      type Token_Type is (<>);
-   package File_Descriptor_Passing is
-      --  Some platforms require that file descriptors be passed alongside
-      --  some other data. It is safe to pass a null record or empty type
-      --  alongside `Token_Type` iff your platform does not require data
-      --  to be transferred alongside file descriptors.
-      --
-      --  Because `Token_Type` may be used by an implementation unaware
-      --  of Ada conventions, it must be a discrete type (ARM) and the
-      --  user must not assume that representation pragmas will be observed.
 
-      function Read_FDs
-        (Socket : GNAT.Sockets.Socket_Type; Token : out Token_Type)
-         return File_Descriptor_Array;
-      --  Read an array of file descriptors from a socket.
-      --  Consumes `Token` from the socket.
-      --
-      --  On failure:
-      --  Raise `File_Descriptor_Error` if no data was consumed.
-      --  Raise `File_Descriptor_Destructive_Error` if data was consumed.
+   procedure Receive_Data_With_FDs
+     (Socket : GNAT.Sockets.Socket_Type;
+      Item   : out Ada.Streams.Stream_Element_Array;
+      Last   : out Ada.Streams.Stream_Element_Offset;
+      FDs    : in out FD_Vector);
+   --  Read data from a socket and attempt to retrieve FDs transferred on it.
+   --  Raise File_Descriptor_Error if file descriptors may have been lost
 
-      procedure Write_FDs
-        (Socket : GNAT.Sockets.Socket_Type; FDs : File_Descriptor_Array;
-         Token  : Token_Type);
-      --  Pass an array of file descriptors over a socket.
-      --  Writes `Token` to the socket.
-      --
-      --  On failure:
-      --  Raise `File_Descriptor_Error` if no data was transferred.
-   end File_Descriptor_Passing;
+   procedure Send_Data_With_FDs
+     (Socket : GNAT.Sockets.Socket_Type;
+      Item   : Ada.Streams.Stream_Element_Array;
+      FDs    : FD_Vector);
+   --  Write data to a socket and attempt to send FDs over it
+   --  Raise File_Descriptor_Error if no file descriptors could be sent
 
    -----------------
    -- CREDENTIALS --

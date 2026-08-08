@@ -1,15 +1,14 @@
 pragma Ada_2012;
 
-with Ada.Containers;
-with Ada.Containers.Vectors;
 with Ada.Environment_Variables;
 with Ada.Streams;
 
-with D_Bus.Types.Extra;
 with GNAT.OS_Lib;
 with GNAT.Sockets;
 
 with D_Bus.Messages;
+with D_Bus.Platform;
+with D_Bus.Types.Extra;
 private with D_Bus.Streams;
 
 package D_Bus.Connection is
@@ -128,19 +127,12 @@ private
    -------------------
    --  Stream Impl  --
    -------------------
-   use type GNAT.OS_Lib.File_Descriptor;
-   package FD_Vectors is new
-     Ada.Containers.Vectors
-       (Natural,
-        GNAT.OS_Lib.File_Descriptor);
-   subtype FD_Vector is FD_Vectors.Vector;
-
    type Canonical_Alignable_Stream is new D_Bus.Streams.Alignable_Stream
    with record
       Connection  : not null access constant Connected_Connection;
       Read_Count  : Ada.Streams.Stream_Element_Count := 0;
       Write_Count : Ada.Streams.Stream_Element_Count := 0;
-      FDs         : FD_Vector;
+      FDs         : D_Bus.Platform.FD_Vector;
    end record;
 
    overriding
@@ -158,11 +150,13 @@ private
      (Stream : in out Canonical_Alignable_Stream;
       Item   : out Ada.Streams.Stream_Element_Array;
       Last   : out Ada.Streams.Stream_Element_Offset);
+   --  Trying to read from the stream also reads FDs
 
    overriding
    procedure Write
      (Stream : in out Canonical_Alignable_Stream;
       Item   : Ada.Streams.Stream_Element_Array);
+   --  Trying to write to the stream also writes FDs
 
    overriding
    function Retrieve_FD
@@ -176,10 +170,6 @@ private
 
    overriding
    procedure Clear_FDs (Stream : not null access Canonical_Alignable_Stream);
-   overriding
-   procedure Read_FDs (Stream : not null access Canonical_Alignable_Stream);
-   overriding
-   procedure Write_FDs (Stream : not null access Canonical_Alignable_Stream);
 
    overriding
    function FD_Count
